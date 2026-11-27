@@ -28,7 +28,46 @@ function painel(acao, dados) {
   const click = el => { if (!el) return false; el.click(); return true; };
   const headings = 'h1,h2,h3,h4,legend,[role=heading],[role=tab][aria-selected=true],nav [aria-current=page]';
   const active = labels => all(headings).some(e => vis(e) && matches(e, labels));
+  const libraryLabels = labels => labels?.some(label => dados.biblioteca?.includes(label));
+  function libraryElements() {
+    const labels = dados.biblioteca.map(norm);
+    return all('button,a,span,div,label,strong,b,p,i,em,h1,h2,h3,h4,[role=button],[role=heading],[title],[aria-label]')
+      .filter(e => vis(e) && (matches(e,dados.biblioteca) ||
+        [...e.childNodes].some(n => n.nodeType === 3 && labels.includes(norm(n.textContent)))));
+  }
+  function inProgramToolbar(el) {
+    const text = norm(el.innerText);
+    return text.includes('add program') || text.includes('adicionar programa');
+  }
+  function libraryButton() {
+    const found = libraryElements().filter(el => {
+      for (let p=el.parentElement; p && p !== el.ownerDocument.body; p=p.parentElement) {
+        if (inProgramToolbar(p)) return true;
+        if (p.matches('dialog,[role=dialog],aside') || /picture format should be/i.test(p.innerText)) break;
+      }
+      return false;
+    });
+    return one(found.filter(el => !found.some(other => other !== el && el.contains(other))));
+  }
+  function libraryRoot() {
+    const roots = new Set();
+    for (const el of libraryElements()) {
+      for (let p=el; p && p !== el.ownerDocument.body; p=p.parentElement) {
+        if (inProgramToolbar(p)) break;
+        if (p.querySelector('input[type=file]') ||
+            /picture format should be|total number of material is/i.test(p.innerText)) {
+          roots.add(p);
+          break;
+        }
+      }
+    }
+    return one([...roots]) || scope(one(all(headings).filter(e => vis(e) && matches(e,dados.biblioteca))));
+  }
   function menuLabel(labels) {
+    if (libraryLabels(labels)) {
+      const button = libraryButton();
+      if (button) return button;
+    }
     const selector = buttons + ',li,div,span,p,strong,b,em,label,dt,dd,td,summary,[aria-expanded],[onclick],[title],[aria-label]';
     const candidates = all(selector).filter(e => usable(e) && matches(e, labels));
     // A legenda pode ser só texto dentro do item que recebe o evento.
@@ -281,7 +320,7 @@ function painel(acao, dados) {
     }
     case 'success': return all('[role=status],[role=alert],.toast,.el-message,.ant-message-notice').some(e => vis(e) &&
       /^(saved successfully|successfully saved|save successful|salvo com sucesso|salva com sucesso|alterações salvas|configurações salvas)[.!]?$/i.test(e.innerText.trim()));
-    case 'active': return active(dados.rotulos);
+    case 'active': return libraryLabels(dados.rotulos) ? !!libraryRoot() : active(dados.rotulos);
     case 'menuPoint': return menuPoint(dados.rotulos, dados.proximos?.length);
     case 'menuReached': return dados.proximos?.length
       ? !!menuLabel(dados.proximos)
@@ -304,11 +343,11 @@ function painel(acao, dados) {
       return click((root && action(save,root)) || action(save,el.ownerDocument));
     }
     case 'media': {
-      const root = scope(one(all(headings).filter(e => vis(e) && matches(e,dados.biblioteca))));
+      const root = libraryRoot();
       return !!root && fileMatches(root).length > 0;
     }
     case 'file': {
-      const root = scope(one(all(headings).filter(e => vis(e) && matches(e,dados.biblioteca))));
+      const root = libraryRoot();
       if (!root) return null;
       return one(all('input[type=file]:not(:disabled)',root)
         .filter(e => !e.accept || /image|\.(jpg|jpeg|png|bmp|gif|webp|tiff?)/i.test(e.accept)));
