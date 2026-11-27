@@ -2,8 +2,9 @@
 function painel(acao, dados) {
   const norm = v => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .trim().replace(/\s+/g, ' ').toLowerCase();
-  const origin = new URL(dados.url);
-  if (origin.protocol !== 'https:' || location.origin !== origin.origin) return null;
+  if (!['http:','https:'].includes(location.protocol)) return null;
+  const terminal = new URL('//' + dados.endereco, location.href);
+  if (location.origin !== terminal.origin) return null;
   const docs = [document];
   for (const doc of docs) {
     for (const frame of doc.querySelectorAll('iframe,frame')) {
@@ -168,6 +169,27 @@ function painel(acao, dados) {
       [e.title,e.alt,e.getAttribute('aria-label'),!e.children.length && e.textContent?.trim()].includes(name));
   }
   const dialog = () => one(all('dialog[open],[role=dialog],.modal.show').filter(vis));
+  const importLabels = ['Import','Importar','Upload','Enviar imagem','Import Image','Importar imagem'];
+  const modalSelector = 'dialog[open],[role=dialog],.modal.show,.el-dialog,.ant-modal,.layui-layer';
+  function libraryRoot() {
+    const libraryModal = one(all(modalSelector).filter(d => vis(d) &&
+      (matches(d,dados.biblioteca) || all(headings + ',div,span',d).some(e => vis(e) && matches(e,dados.biblioteca)))));
+    if (libraryModal) return libraryModal;
+    const anchors = all(headings).filter(e => vis(e) && matches(e,dados.biblioteca));
+    for (const el of anchors) {
+      const linked = el.hasAttribute('aria-controls') && el.ownerDocument.getElementById(el.getAttribute('aria-controls'));
+      if (linked && vis(linked)) return linked;
+      if (!el.matches('[role=tab]') && scope(el)) return scope(el);
+    }
+    if (!menuSelected(dados.biblioteca)) return null;
+    const doc = (anchors[0] || menuLabel(dados.biblioteca))?.ownerDocument;
+    if (!doc) return null;
+    return one(all('[role=tabpanel]',doc).filter(vis)) || one(all('main,[role=main]',doc).filter(vis)) || doc.body;
+  }
+  function uploadDialog(root) {
+    return one(all(modalSelector,root.ownerDocument).filter(d => vis(d) && !d.contains(root) &&
+      (d.querySelector('input[type=file]') || all(headings,d).some(e => matches(e,importLabels)))));
+  }
   function setValue(el, value) {
     const win = el.ownerDocument.defaultView;
     const proto = el.tagName === 'SELECT' ? win.HTMLSelectElement.prototype : win.HTMLInputElement.prototype;
@@ -285,6 +307,7 @@ function painel(acao, dados) {
     case 'menuPoint': return menuPoint(dados.rotulos, dados.proximos?.length);
     case 'menuReached': return dados.proximos?.length
       ? !!menuLabel(dados.proximos)
+      : dados.tela === 'library' ? !!libraryRoot()
       : menuSelected(dados.rotulos) || state(sleepControl()) !== null;
     case 'click': return click(action(dados.rotulos));
     case 'sleep': return state(sleepControl());
@@ -304,13 +327,23 @@ function painel(acao, dados) {
       return click((root && action(save,root)) || action(save,el.ownerDocument));
     }
     case 'media': {
-      const root = scope(one(all(headings).filter(e => vis(e) && matches(e,dados.biblioteca))));
-      return !!root && fileMatches(root).length > 0;
+      const root = libraryRoot();
+      return !!root && !uploadDialog(root) && fileMatches(root).some(e =>
+        !e.closest('label,[role=alert],[role=status],.el-upload-list,.ant-upload-list'));
+    }
+    case 'openImport': {
+      const root = libraryRoot();
+      return !!root && !uploadDialog(root) && click(action(importLabels,root));
+    }
+    case 'confirmImport': {
+      const root = libraryRoot();
+      const d = root && uploadDialog(root);
+      return !!d && click(action([...importLabels,'OK','Confirm','Confirmar'],d));
     }
     case 'file': {
-      const root = scope(one(all(headings).filter(e => vis(e) && matches(e,dados.biblioteca))));
+      const root = libraryRoot();
       if (!root) return null;
-      return one(all('input[type=file]:not(:disabled)',root)
+      return one(all('input[type=file]:not(:disabled)',uploadDialog(root) || root)
         .filter(e => !e.accept || /image|\.(jpg|jpeg|png|bmp|gif|webp|tiff?)/i.test(e.accept)));
     }
     case 'editor': return editor();

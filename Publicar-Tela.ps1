@@ -14,45 +14,39 @@ $script:notice = @('Notice Publication','Publicação de avisos','Publicação d
 $script:library = @('Media Library Management','Gerenciamento da biblioteca de mídia','Biblioteca de mídia')
 $script:agenda = @('Schedule Management','Gerenciamento de horários','Gerenciamento de agenda','Programação de horários')
 
-function Get-TerminalUrl([string]$value) {
+function Get-TerminalAddress([string]$value) {
     $value = $value.Trim()
     if (!$value) { throw 'Endereço vazio.' }
-    $value = $value -replace '^http://', 'https://'
-    if ($value -notmatch '^[a-z][a-z\d+.-]*://') { $value = 'https://' + $value }
-    $uri = $null
-    if (![Uri]::TryCreate($value, [UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -ne 'https' -or
-        !$uri.Host -or $uri.UserInfo -or $value -match '[\s\\]') { throw "Endereço inválido: $value" }
-    # Uma URL com caminho numérico também pode ser válida. O operador decide.
-    if ($value -match '^https://(?:\[[^\]]+\]|[^/:?#]+)/(?<porta>[0-9]{1,5})/?$') {
-        $port = [int]$Matches.porta
-        if ($port -ge 1 -and $port -le 65535) {
-            $alternative = [UriBuilder]::new($uri)
-            $alternative.Port = $port
-            $alternative.Path = '/'
-            Write-Host "Com a barra, o endereço é $($uri.AbsoluteUri). Usando a porta $port, fica $($alternative.Uri.AbsoluteUri)." -ForegroundColor Yellow
-            if (Ask-Yes "Usar a porta $port neste terminal? Responda N para manter a barra.") {
-                return $alternative.Uri.AbsoluteUri
-            }
-        }
+    $value = $value -replace '^https?://', ''
+    if ($value -notmatch '^(?:[a-z0-9][a-z0-9.-]*|\[[a-f0-9:]+\])(?::\d+)?(?:[/?#][^\s"\\]*)?\z' -or
+        $value -match '^[^/?#]+://') { throw "Endereço inválido: $value" }
+    # Na entrada do operador, IP/porta e IP:porta indicam a mesma porta de rede.
+    if ($value -match '^(?<host>\[[^\]]+\]|[^/:?#]+)/(?<porta>\d+)(?<resto>[/?#].*)?$') {
+        $value = $Matches.host + ':' + $Matches.porta + $Matches.resto
     }
-    return $uri.AbsoluteUri
+    $uri = $null
+    if (![Uri]::TryCreate(('tcp://' + $value), [UriKind]::Absolute, [ref]$uri) -or
+        !$uri.Host -or $uri.Port -eq 0) { throw "Endereço ou porta inválidos: $value" }
+    return $value
 }
 
 function Select-ImageFile([string]$path, [string]$folder) {
     $types = @('.png','.jpg','.jpeg','.bmp','.gif','.webp','.tif','.tiff','.ico','.jfif')
+    $auto = !$path
+    $namePattern = '^HDCENTER(?:\s*\(\d+\))?$'
     if (!$path) {
         if (!$folder) {
             $folder = (Get-ItemProperty -ErrorAction SilentlyContinue 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders').'{374DE290-123F-4565-9164-39C4925E467B}'
             if ($folder) { $folder = [Environment]::ExpandEnvironmentVariables($folder) }
             else { $folder = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'Downloads' }
         }
-        try {
-            $files = @(Get-ChildItem -File -LiteralPath $folder | Where-Object {
-                $_.Extension -notin '.tmp','.crdownload','.part','.partial','.download' -and $_.Name -notlike '~*'
-            } | Sort-Object LastWriteTimeUtc -Descending)
-            if ($files.Count -gt 0 -and ($files.Count -eq 1 -or $files[0].LastWriteTimeUtc -ne $files[1].LastWriteTimeUtc) -and
-                $files[0].Extension -in $types) { $path = $files[0].FullName }
-        } catch { Write-Host "Falha ao ler Downloads: $($_.Exception.Message)" }
+        $files = @(Get-ChildItem -File -LiteralPath $folder | Where-Object {
+            $_.BaseName -match $namePattern -and $_.Extension -in $types -and $_.Length -gt 0
+        } | Sort-Object LastWriteTimeUtc -Descending)
+        if (!$files.Count) { throw "Nenhuma imagem HDCENTER encontrada em $folder." }
+        if ($files.Count -eq 1 -or $files[0].LastWriteTimeUtc -ne $files[1].LastWriteTimeUtc) {
+            $path = $files[0].FullName
+        } else { Write-Host 'Há imagens HDCENTER com a mesma data. Escolha a cópia desejada.' }
     }
     while ($true) {
         if (!$path) {
@@ -67,7 +61,12 @@ function Select-ImageFile([string]$path, [string]$folder) {
             } finally { $dialog.Dispose() }
         }
         $item = Get-Item -ErrorAction SilentlyContinue -LiteralPath $path
-        if ($item -is [IO.FileInfo] -and $item.Extension -in $types -and $item.Length -gt 0) { return $item.FullName }
+        if ($item -is [IO.FileInfo] -and $item.Extension -in $types -and $item.Length -gt 0) {
+            if (!$auto -or $item.BaseName -match $namePattern) { return $item.FullName }
+            Write-Host 'Selecione uma imagem com o nome HDCENTER.'
+            $path = $null
+            continue
+        }
         Write-Host "Arquivo ausente, vazio ou com extensão de imagem desconhecida: $path"
         $path = $null
     }
@@ -93,6 +92,9 @@ function Send-Cdp([string]$method, [hashtable]$parameters = @{}) {
                     $stream.Write($buffer,0,$chunk.Count)
                 } until ($chunk.EndOfMessage)
                 $response = [Text.Encoding]::UTF8.GetString($stream.ToArray()) | ConvertFrom-Json
+                if ($response.method -eq 'Page.fileChooserOpened') {
+                    $script:chooserNode = $response.params.backendNodeId
+                }
             } finally { $stream.Dispose() }
         } until ($response.id -eq $id)
         if ($response.error) { throw "$method - $($response.error.message)" }
@@ -100,8 +102,10 @@ function Send-Cdp([string]$method, [hashtable]$parameters = @{}) {
     } finally { $cts.Dispose() }
 }
 
-function Connect-Tab {
-    $tab = Invoke-RestMethod -Method Put -DisableKeepAlive -Body ([byte[]]@()) -UseBasicParsing -TimeoutSec 5 -Uri "$script:local/json/new?about:blank"
+function Connect-Tab($tab) {
+    if (!$tab) {
+        $tab = Invoke-RestMethod -Method Put -DisableKeepAlive -Body ([byte[]]@()) -UseBasicParsing -TimeoutSec 5 -Uri "$script:local/json/new?about:blank"
+    }
     $script:tabId = $tab.id
     $script:ws = New-Object Net.WebSockets.ClientWebSocket
     $cts = New-Object Threading.CancellationTokenSource
@@ -113,7 +117,7 @@ function Connect-Tab {
 }
 
 function Invoke-Panel([string]$action,[hashtable]$data = @{},[switch]$Object) {
-    $data.url = $script:target
+    $data.endereco = $script:address
     $data.nome = $script:fileName
     $data.biblioteca = $script:library
     $arg = ConvertTo-Json -Compress -Depth 6 -InputObject $data
@@ -161,12 +165,7 @@ function Open-Section([array]$steps) {
     return (Wait-Panel 'active' @{rotulos=$last} 2)
 }
 
-function Open-Screen {
-    $path = @(
-        @{rotulos=$script:configuration; proximos=$script:preferences},
-        @{rotulos=$script:preferences; proximos=$script:screen},
-        @{rotulos=$script:screen; proximos=@()}
-    )
+function Open-MenuPath([array]$path) {
     if (Invoke-Panel 'menuReached' $path[-1]) { return $true }
     foreach ($step in $path) {
         if (Invoke-Panel 'menuReached' $step) { continue }
@@ -188,8 +187,20 @@ function Open-Screen {
     }
     return (Wait-Panel 'menuReached' $path[-1] 3)
 }
+function Open-Screen {
+    return (Open-MenuPath @(
+        @{rotulos=$script:configuration; proximos=$script:preferences},
+        @{rotulos=$script:preferences; proximos=$script:screen},
+        @{rotulos=$script:screen; tela='screen'}
+    ))
+}
 function Open-Notice { return (Open-Section @(@{labels=$script:notice})) }
-function Open-Library { return (Open-Section @(@{labels=$script:notice},@{labels=$script:library})) }
+function Open-Library {
+    return (Open-MenuPath @(
+        @{rotulos=$script:notice; proximos=$script:library},
+        @{rotulos=$script:library; tela='library'}
+    ))
+}
 function Open-Agenda { return (Open-Section @(@{labels=$script:notice},@{labels=$script:agenda})) }
 
 function Reload-Panel {
@@ -245,16 +256,46 @@ function Import-Media {
         if (Ask-Yes "A biblioteca contém '$script:fileName'. A miniatura corresponde à imagem deste lote?") { return }
         throw 'Já existe outra mídia com esse nome. Use um arquivo com nome distinto para evitar associação incorreta.'
     }
-    # O navegador recebe exatamente o caminho escolhido, sem digitação simulada.
+    Write-Host "Importando $script:fileName na biblioteca..."
     $fileId = Invoke-Panel 'file' @{} -Object
-    if ($fileId) {
-        try { $null = Send-Cdp 'DOM.setFileInputFiles' @{objectId=$fileId;files=@($script:imagePath)} }
-        finally { $null = Send-Cdp 'Runtime.releaseObject' @{objectId=$fileId} }
-        if (!(Wait-Panel 'media' @{} 4)) {
-            Ask-Step "O arquivo foi selecionado. Conclua a importação, se o painel pedir, e confira '$script:fileName' na biblioteca antes de continuar."
+    $script:chooserNode = $null
+    $intercept = $false
+    $selected = $false
+    try {
+        if (!$fileId) {
+            $null = Send-Cdp 'Page.enable'
+            $null = Send-Cdp 'Page.setInterceptFileChooserDialog' @{enabled=$true}
+            $intercept = $true
+            if (Wait-Panel 'openImport' @{} 3) {
+                $limit = [DateTime]::UtcNow.AddSeconds(5)
+                do {
+                    $fileId = Invoke-Panel 'file' @{} -Object
+                    if ($script:chooserNode -or $fileId) { break }
+                    Start-Sleep -Milliseconds 200
+                } while ([DateTime]::UtcNow -lt $limit)
+            }
         }
-    } else {
-        Ask-Step "Confira a biblioteca. Se a mesma imagem já estiver disponível, reutilize-a. Caso contrário, use Import para selecionar '$script:imagePath'. Aguarde a conclusão e confira o nome e a miniatura."
+        $params = @{files=@($script:imagePath)}
+        if ($script:chooserNode) { $params.backendNodeId = $script:chooserNode }
+        elseif ($fileId) { $params.objectId = $fileId }
+        if ($script:chooserNode -or $fileId) {
+            $null = Send-Cdp 'DOM.setFileInputFiles' $params
+            $selected = $true
+        }
+    } finally {
+        if ($intercept) { $null = Send-Cdp 'Page.setInterceptFileChooserDialog' @{enabled=$false} }
+        if ($fileId) { $null = Send-Cdp 'Runtime.releaseObject' @{objectId=$fileId} }
+        $script:chooserNode = $null
+    }
+    if (!$selected) {
+        Ask-Step "Em Media Library Management, use Import para selecionar '$script:imagePath'. Confirme quando a imagem aparecer na biblioteca."
+        return
+    }
+    if (!(Wait-Panel 'media' @{} 2)) {
+        $null = Invoke-Panel 'confirmImport'
+        if (!(Wait-Panel 'media' @{} 15)) {
+            Ask-Step "O arquivo já foi selecionado. Confira o andamento da importação e confirme quando '$script:fileName' aparecer na biblioteca."
+        }
     }
 }
 
@@ -334,6 +375,8 @@ function Start-PanelBrowser([string]$profile) {
         "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe"
     ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
     if (!$app) { throw 'Instale o Microsoft Edge ou Google Chrome para abrir o painel dos terminais.' }
+    $script:browserExe = $app
+    $script:browserProfile = $profile
     $null = [IO.Directory]::CreateDirectory($profile)
     $portFile = Join-Path $profile 'DevToolsActivePort'
     $previous = if (Test-Path -LiteralPath $portFile) { [IO.File]::ReadAllText($portFile) }
@@ -417,31 +460,47 @@ function Enter-Terminal {
 }
 
 function Open-Terminal {
-    Connect-Tab
-    $null = Send-Cdp 'Network.enable'
-    $null = Send-Cdp 'Network.setBlockedURLs' @{urls=@('http://*')}
-    $navigation = Send-Cdp 'Page.navigate' @{url=$script:target}
-    if ($navigation.errorText -like 'net::ERR_CERT_*') {
-        Ask-Step 'O navegador pediu a verificação do certificado. Confira o endereço e resolva o aviso no navegador segundo o procedimento do equipamento.'
-    } elseif ($navigation.errorText -eq 'net::ERR_BLOCKED_BY_CLIENT') {
-        $failure = "O navegador bloqueou a abertura de $script:target ($($navigation.errorText))."
-        try {
-            Ask-Step "$failure Na mesma aba, abra esse endereço pela barra do navegador. Digite C quando o painel ou o login aparecer, ou P se o bloqueio continuar."
-        } catch { throw "$failure $($_.Exception.Message)" }
-        if (!(Wait-Panel 'ready' @{} 5)) { throw "$failure A aba ainda não carregou o endereço do terminal." }
-    } elseif ($navigation.errorText) { throw "Falha ao abrir o terminal: $($navigation.errorText)" }
-    Enter-Terminal
+    $list = "$script:local/json/list"
+    $oldIds = (Invoke-RestMethod -UseBasicParsing -TimeoutSec 5 -Uri $list).id
+    $expected = [Uri]('tcp://' + $script:address)
+    # O navegador interpreta o argumento sem prefixo e abre a aba no perfil do lote.
+    Start-Process -FilePath $script:browserExe -ArgumentList @(
+        "--user-data-dir=`"$script:browserProfile`"", "`"$script:address`"")
+    $limit = [DateTime]::UtcNow.AddSeconds(20)
+    do {
+        $tabs = Invoke-RestMethod -UseBasicParsing -TimeoutSec 5 -Uri $list
+        foreach ($tab in $tabs) {
+            if ($tab.type -ne 'page' -or $tab.id -in $oldIds) { continue }
+            $actual = $null
+            if (![Uri]::TryCreate($tab.url,[UriKind]::Absolute,[ref]$actual) -or
+                $actual.Scheme -notin 'http','https' -or $actual.Host -ne $expected.Host) { continue }
+            if ($expected.Port -eq -1 -and !$actual.IsDefaultPort) { continue }
+            if ($expected.Port -ne -1 -and $expected.Port -ne $actual.Port) { continue }
+            Connect-Tab $tab
+            Enter-Terminal
+            return
+        }
+        Start-Sleep -Milliseconds 250
+    } while ([DateTime]::UtcNow -lt $limit)
+    throw "O navegador não abriu uma aba no endereço e porta de $script:address."
 }
 
 function Publish-Batch {
     if ([string]::CompareOrdinal($Inicio,$Fim) -ge 0 -or [string]::IsNullOrWhiteSpace($Dias)) { throw 'Indique os dias e um intervalo com início anterior ao fim.' }
-    if (!$Terminais) { $Terminais = @((Read-Host 'IPs ou URLs dos terminais (ex.: 192.168.1.50:8686). Acesso por HTTPS. Separe os endereços por espaço, vírgula ou ponto e vírgula')) }
-    $targets = @($Terminais -split '[\s,;]+' | Where-Object { $_ } | ForEach-Object { Get-TerminalUrl $_ } | Select-Object -Unique)
+    if (!$Terminais) {
+        $inputAddress = Read-Host 'IP dos terminais (Enter para 177.74.189.75). Use IP:porta ou IP/porta. Separe vários por espaço, vírgula ou ponto e vírgula'
+        $Terminais = if ($inputAddress.Trim()) { $inputAddress } else { '177.74.189.75' }
+    }
+    $targets = [ordered]@{}
+    foreach ($entry in ($Terminais -split '[\s,;]+' | Where-Object { $_ })) {
+        $address = Get-TerminalAddress $entry
+        if (!$targets.Contains($address)) { $targets[$address] = $entry }
+    }
     if (!$targets.Count) { throw 'Informe pelo menos um endereço.' }
     $script:imagePath = Select-ImageFile $Imagem $Downloads
     $script:fileName = [IO.Path]::GetFileName($script:imagePath)
     Write-Host "Imagem do lote: $script:imagePath"
-    Write-Host ("Terminais: " + ($targets -join ', '))
+    Write-Host ("Terminais: " + ($targets.Values -join ', '))
     Write-Host "Programa HD | $Inicio até $Fim | $Dias"
     if (!(Ask-Yes 'Iniciar a publicação com essa imagem?')) { Write-Host 'Lote cancelado.'; return }
     if (!$PastaRelatorios) { $PastaRelatorios = Join-Path $PSScriptRoot 'Relatorios' }
@@ -457,18 +516,15 @@ function Publish-Batch {
         if (!$held) { throw 'Outro lote está em andamento neste computador.' }
         $fileLock = [IO.File]::Open($script:imagePath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
         Start-PanelBrowser (Join-Path $env:LOCALAPPDATA 'PublicacaoTelaHD\Navegador')
-        foreach ($script:target in $targets) {
+        foreach ($script:address in $targets.Keys) {
+            $script:target = $targets[$script:address]
             Write-Host "`nTerminal $script:target" -ForegroundColor Cyan
             $stage = 'Acesso'
             $row = [ordered]@{Terminal=$script:target; Imagem=$script:fileName; Periodo="$Inicio a $Fim ($Dias)"; Sleep='Pendente'; Biblioteca='Pendente'; ProgramaHD='Pendente'; Agenda='Pendente'; Motivo=''}
             try {
                 Open-Terminal
                 $stage = 'Screen Display'
-                try { $row.Sleep = Set-Screen } catch {
-                    if ($_.Exception.Message -like 'PULAR IP.*') { throw }
-                    $row.Motivo = "Screen Display - $($_.Exception.Message)"
-                    Write-Host $row.Motivo -ForegroundColor Yellow
-                }
+                $row.Sleep = Set-Screen
                 $stage = 'Biblioteca'
                 Import-Media
                 $row.Biblioteca = 'Imagem identificada'

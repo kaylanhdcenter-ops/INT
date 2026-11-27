@@ -5,17 +5,15 @@ No Windows, dê dois cliques em “Publicar Tela HD.cmd”. O pacote usa o
 Windows PowerShell 5.1 e o Edge ou Chrome instalado no computador.
 Você precisa ter acesso à rede dos terminais e ao painel de configuração.
 
-1. Informe um ou vários IPs ou URLs, separados por espaço, vírgula ou
-   ponto e vírgula. O acesso ao terminal usa HTTPS. Para uma porta
-   específica, digite 192.168.1.50:8686 ou https://192.168.1.50:8686.
-   Se digitar 192.168.1.50/8686, o script pergunta se 8686 é a porta.
-   Responda S para usar a porta ou N para manter o caminho /8686.
-   Se colar um endereço com http://, o script troca o prefixo por https://
-   antes de abrir o navegador. A porta e o caminho informados são preservados.
-2. Confira o caminho da imagem antes de iniciar. O script ordena Downloads
-   pela última modificação e ignora downloads parciais. Se o arquivo mais
-   recente for um ZIP, por exemplo, ou houver empate, ele abre o seletor.
-   A mesma imagem é usada em todo o lote.
+1. Pressione Enter para usar 177.74.189.75 ou digite os IPs desejados.
+   Separe vários endereços por espaço, vírgula ou ponto e vírgula.
+   Para informar a porta, use 177.74.189.75:8686 ou 177.74.189.75/8686.
+   As duas formas abrem a porta 8686. O navegador recebe o endereço sem
+   prefixo e escolhe o protocolo. O CSV conserva o endereço digitado.
+2. O script procura em Downloads a imagem HDCENTER mais recente pela data
+   de modificação. Também aceita cópias como HDCENTER (1).jpeg. Em caso de
+   empate, escolha a cópia desejada. Confira o caminho exibido antes de
+   iniciar. A mesma imagem é usada em todo o lote.
 3. Deixe abertas a janela do script e a do navegador. Quando identificar
    o formulário de login, o script pede a senha de admin para aquele
    terminal na janela do PowerShell. A digitação é oculta. Pressione Enter
@@ -24,15 +22,15 @@ Você precisa ter acesso à rede dos terminais e ao painel de configuração.
    continuar aberto após o envio, o CSV registra a pendência daquele IP.
    Em telas de autenticação diferentes, siga a indicação na janela.
    A senha não é gravada pelo script nem incluída no CSV.
-   Se aparecer ERR_BLOCKED_BY_CLIENT, a aba fica aberta para você conferir
-   o endereço e abri-lo manualmente. Digite C ao ver o painel ou o login.
-   Se o bloqueio persistir, digite P para registrar a falha e seguir o lote.
+   Se o painel não abrir, confira o IP e a porta indicados no relatório.
 4. Após o login, o script clica em Configuration na barra lateral, abre
    Preference e entra em Screen Display. A janela indica qual menu está
    abrindo. Se precisar de ajuda com um clique, ela identifica o item.
-   O script salva Sleep desativado, importa ou reutiliza a imagem, edita
-   ou cria o programa HD e programa a exibição de 00:00 a 24:00 nos sete
-   dias. Quando encontrar mídia com o mesmo nome, confira a miniatura.
+   Depois de salvar e conferir Sleep desativado, o script abre Notice
+   Publication > Media Library Management, importa a imagem e confere o
+   nome na biblioteca. Se já houver mídia com esse nome, confira a miniatura.
+   Em seguida, edita ou cria o programa HD e programa a exibição de
+   00:00 a 24:00 nos sete dias.
    Quando for criar HD, confira antes a lista completa de programas.
 5. Em telas com controles diferentes, siga a instrução amarela. Digite C
    depois de executar e conferir a etapa, P para registrar uma pendência
