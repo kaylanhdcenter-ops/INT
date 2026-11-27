@@ -162,6 +162,7 @@ function Open-Section([array]$steps) {
 }
 
 function Open-Screen {
+    $menuTimeoutSeconds = 30
     $path = @(
         @{rotulos=$script:configuration; proximos=$script:preferences},
         @{rotulos=$script:preferences; proximos=$script:screen},
@@ -172,7 +173,7 @@ function Open-Screen {
         if (Invoke-Panel 'menuReached' $step) { continue }
         $name = $step.rotulos[0]
         Write-Host "Abrindo $name..."
-        $limit = [DateTime]::UtcNow.AddSeconds(8)
+        $limit = [DateTime]::UtcNow.AddSeconds($menuTimeoutSeconds)
         do {
             $point = Invoke-Panel 'menuPoint' $step
             if ($point) { break }
@@ -182,7 +183,13 @@ function Open-Screen {
             $null = Send-Cdp 'Input.dispatchMouseEvent' @{type='mouseMoved';x=$point.x;y=$point.y}
             $null = Send-Cdp 'Input.dispatchMouseEvent' @{type='mousePressed';button='left';buttons=1;clickCount=1;x=$point.x;y=$point.y}
             $null = Send-Cdp 'Input.dispatchMouseEvent' @{type='mouseReleased';button='left';buttons=0;clickCount=1;x=$point.x;y=$point.y}
-            if (Wait-Panel 'menuReached' $step 8) { continue }
+            if ($step.proximos.Count) { Write-Host "Aguardando $($step.proximos[0])..." }
+            if (Wait-Panel 'menuReached' $step $menuTimeoutSeconds) { continue }
+            if ($step.proximos.Count) {
+                $next = $step.proximos[0]
+                Ask-Step "Não consegui acessar $next. Se necessário, abra $name e aguarde $next aparecer. Digite C quando $next estiver disponível."
+                continue
+            }
         }
         Ask-Step "Não consegui confirmar a abertura de $name. Clique em $name no painel e digite C para o script continuar."
     }
