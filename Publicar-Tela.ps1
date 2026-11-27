@@ -3,7 +3,7 @@
 param([string[]]$Terminais, [string]$Imagem, [string]$Downloads, [string]$PastaRelatorios,
       [ValidatePattern('^(?:[01]\d|2[0-3]):[0-5]\d$')][string]$Inicio = '00:00',
       [ValidatePattern('^(?:(?:[01]\d|2[0-3]):[0-5]\d|24:00)$')][string]$Fim = '24:00',
-      [string]$Dias = 'todos os dias')
+      [string]$Dias = 'todos os dias', [switch]$CadastrarSenhaAdmin)
 $ErrorActionPreference = 'Stop'
 $script:interface = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $PSScriptRoot 'painel.js')
 $script:seq = 0
@@ -398,7 +398,48 @@ function Wait-Access([switch]$AfterLogin) {
     return $state
 }
 
+function Get-AdminPasswordPath([uri]$target) {
+    $origin = $target.GetLeftPart([UriPartial]::Authority)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($origin))
+        $key = [BitConverter]::ToString($hash).Replace('-','')
+    } finally { $sha.Dispose() }
+    $folder = Join-Path $env:LOCALAPPDATA 'PublicacaoTelaHD\Credenciais'
+    return (Join-Path $folder "$key.dpapi")
+}
+
+function Register-AdminPassword {
+    if ($Terminais.Count -ne 1 -or [string]::IsNullOrWhiteSpace($Terminais[0])) {
+        throw 'Informe um único terminal em -Terminais para cadastrar a senha de admin.'
+    }
+    $target = Get-TerminalUrl $Terminais[0]
+    $path = Get-AdminPasswordPath $target
+    $password = Read-Host "Cadastre a senha de admin para $target" -AsSecureString
+    try {
+        if (!$password -or !$password.Length) { throw 'A senha de admin está em branco.' }
+        $folder = [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($path))
+        $temporary = Join-Path $folder.FullName ([guid]::NewGuid().ToString('N') + '.tmp')
+        try {
+            [IO.File]::WriteAllText($temporary, (ConvertFrom-SecureString -SecureString $password), [Text.Encoding]::ASCII)
+            if ([IO.File]::Exists($path)) { [IO.File]::Replace($temporary, $path, [NullString]::Value, $true) }
+            else { [IO.File]::Move($temporary, $path) }
+        } finally { [IO.File]::Delete($temporary) }
+    } finally {
+        if ($password) { $password.Dispose() }
+    }
+    Write-Host "Senha de admin cadastrada no Windows para $target"
+}
+
 function Read-TerminalPassword {
+    $path = Get-AdminPasswordPath $script:target
+    if (Test-Path -LiteralPath $path -PathType Leaf) {
+        try {
+            return (ConvertTo-SecureString -String ([IO.File]::ReadAllText($path)))
+        } catch {
+            throw 'Não foi possível abrir a senha de admin cadastrada. Cadastre a senha novamente neste usuário do Windows.'
+        }
+    }
     return (Read-Host "Senha de admin para $script:target" -AsSecureString)
 }
 
@@ -406,7 +447,13 @@ function Enter-Terminal {
     $state = Wait-Access
     if ($state -eq 'panel') { return }
     if ($state -eq 'login') {
-        $handler = Invoke-Panel 'loginHandler' @{} -Object
+        $limit = [DateTime]::UtcNow.AddSeconds(5)
+        do {
+            $handler = Invoke-Panel 'loginHandler' @{} -Object
+            if ($handler) { break }
+            if ((Invoke-Panel 'access') -eq 'panel') { return }
+            Start-Sleep -Milliseconds 250
+        } while ([DateTime]::UtcNow -lt $limit)
         if ($handler) {
             $password = $null
             $address = [IntPtr]::Zero
@@ -522,6 +569,9 @@ function Publish-Batch {
 }
 
 if ($MyInvocation.InvocationName -ne '.') {
-    try { Publish-Batch }
+    try {
+        if ($CadastrarSenhaAdmin) { Register-AdminPassword }
+        else { Publish-Batch }
+    }
     catch { Write-Host $_.Exception.Message -ForegroundColor Red; exit 1 }
 }
