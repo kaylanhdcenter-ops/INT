@@ -1,0 +1,71 @@
+﻿PUBLICAÇÃO DE TELA FACIAL HD
+
+Extraia a pasta inteira do ZIP em um local onde você possa gravar arquivos.
+No Windows, dê dois cliques em “Publicar Tela HD.cmd”. O pacote usa o
+Windows PowerShell 5.1 e o Edge ou Chrome instalado no computador.
+Você precisa ter acesso à rede dos terminais e ao painel de configuração.
+
+1. Informe um ou vários IPs ou URLs, separados por espaço, vírgula ou
+   ponto e vírgula. O padrão é HTTP. Para uma porta específica, digite,
+   por exemplo, 192.168.1.50:8686 ou http://192.168.1.50:8686.
+   Se digitar 192.168.1.50/8686, o script pergunta se 8686 é a porta.
+   Responda S para usar a porta ou N para manter o caminho /8686.
+   Você também pode colar uma URL completa, inclusive com HTTPS.
+2. Confira o caminho da imagem antes de iniciar. O script ordena Downloads
+   pela última modificação e ignora downloads parciais. Se o arquivo mais
+   recente for um ZIP, por exemplo, ou houver empate, ele abre o seletor.
+   A mesma imagem é usada em todo o lote.
+3. Deixe abertas a janela do script e a do navegador. Quando identificar
+   o formulário de login, o script pede a senha de admin para aquele
+   terminal na janela do PowerShell. A digitação é oculta. Pressione Enter
+   para preencher o formulário e enviar o login automaticamente.
+   Se a sessão já estiver aberta, a publicação segue direto. Se o login
+   continuar aberto após o envio, o CSV registra a pendência daquele IP.
+   Em telas de autenticação diferentes, siga a indicação na janela.
+   A senha não é gravada pelo script nem incluída no CSV. Em HTTP a conexão
+   com o terminal não tem a criptografia de transporte do HTTPS.
+   Se aparecer ERR_BLOCKED_BY_CLIENT, a aba fica aberta para você conferir
+   o endereço e abri-lo manualmente. Digite C ao ver o painel ou o login.
+   Se o bloqueio persistir, digite P para registrar a falha e seguir o lote.
+4. Após o login, o script clica em Configuration na barra lateral, abre
+   Preference e entra em Screen Display. A janela indica qual menu está
+   abrindo. Se precisar de ajuda com um clique, ela identifica o item.
+   O script salva Sleep desativado, importa ou reutiliza a imagem, edita
+   ou cria o programa HD e programa a exibição de 00:00 a 24:00 nos sete
+   dias. Quando encontrar mídia com o mesmo nome, confira a miniatura.
+   Quando for criar HD, confira antes a lista completa de programas.
+5. Em telas com controles diferentes, siga a instrução amarela. Digite C
+   depois de executar e conferir a etapa, P para registrar uma pendência
+   ou I para pular o terminal. Em grades gráficas, o operador verifica
+   conflitos e arrasta os períodos. Uma agenda semanal em tabela com
+   campos reconhecidos pode ser preenchida automaticamente. O script
+   consulta o operador antes de substituir outro programa identificado.
+6. Abra o CSV na pasta Relatorios ao lado do script. Cada linha registra
+   um terminal, a imagem, Sleep, biblioteca, programa HD, agenda e motivo
+   de pendência. As confirmações do programa e da agenda se referem à
+   configuração reaberta no painel. Para confirmar a exibição física,
+   confira o visor do aparelho.
+
+ESCOLHER UMA IMAGEM DIRETAMENTE
+
+Na pasta extraída, abra o PowerShell e execute, trocando os dados do exemplo:
+
+powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File ".\Publicar-Tela.ps1" -Terminais "192.168.1.50,192.168.1.51" -Imagem "C:\Avisos\aviso.png"
+
+O parâmetro opcional -Downloads indica outra pasta de origem e
+-PastaRelatorios escolhe onde gravar o CSV. O lançador aplica a opção
+ExecutionPolicy somente ao processo que executa o script.
+
+Para outro período, acrescente, por exemplo:
+-Inicio "08:00" -Fim "18:00" -Dias "segunda a sexta"
+Nesse modo, a seleção e a conferência do intervalo são guiadas no navegador.
+
+ARQUIVOS
+
+Publicar Tela HD.cmd   Abre o script.
+Publicar-Tela.ps1      Processa o lote e grava os resultados.
+painel.js             Identifica e aciona os controles na interface web.
+
+O pacote original contém um roteiro em linguagem natural e os manifestos.
+Este script implementa o fluxo usando a interface web descrita no roteiro.
+Os menus, o modo de salvamento e a grade podem variar conforme o firmware.
