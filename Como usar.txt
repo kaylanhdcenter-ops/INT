@@ -16,14 +16,13 @@ Você precisa ter acesso à rede dos terminais e ao painel de configuração.
    pela última modificação e ignora downloads parciais. Se o arquivo mais
    recente for um ZIP, por exemplo, ou houver empate, ele abre o seletor.
    A mesma imagem é usada em todo o lote.
-3. Deixe abertas a janela do script e a do navegador. Quando identificar
-   o formulário de login, o script pede a senha de admin para aquele
-   terminal na janela do PowerShell. A digitação é oculta. Pressione Enter
-   para preencher o formulário e enviar o login automaticamente.
+3. Deixe abertas a janela do script e a do navegador. Ao identificar
+   o formulário de login, o script preenche o usuário admin e envia a senha
+   cadastrada para o endereço HTTPS do terminal. Sem cadastro, pede a senha
+   na janela do PowerShell com digitação oculta e, depois, envia o formulário.
    Se a sessão já estiver aberta, a publicação segue direto. Se o login
    continuar aberto após o envio, o CSV registra a pendência daquele IP.
    Em telas de autenticação diferentes, siga a indicação na janela.
-   A senha não é gravada pelo script nem incluída no CSV.
    Se aparecer ERR_BLOCKED_BY_CLIENT, a aba fica aberta para você conferir
    o endereço e abri-lo manualmente. Digite C ao ver o painel ou o login.
    Se o bloqueio persistir, digite P para registrar a falha e seguir o lote.
@@ -45,6 +44,17 @@ Você precisa ter acesso à rede dos terminais e ao painel de configuração.
    de pendência. As confirmações do programa e da agenda se referem à
    configuração reaberta no painel. Para confirmar a exibição física,
    confira o visor do aparelho.
+
+CADASTRAR A SENHA PARA O LOGIN AUTOMÁTICO
+
+Na pasta extraída, execute uma vez para cada terminal, com seu endereço:
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\Publicar-Tela.ps1" -Terminais "192.168.1.50" -CadastrarSenhaAdmin
+
+Digite a senha de admin na janela do PowerShell. Ela fica protegida
+pelo Windows na conta atual e vinculada ao endereço HTTPS do terminal.
+Use a mesma conta do Windows para publicar. Para atualizar a senha,
+execute o cadastro de novo. A senha não é incluída no relatório.
 
 ESCOLHER UMA IMAGEM DIRETAMENTE
 
