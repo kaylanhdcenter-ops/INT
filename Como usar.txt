@@ -5,6 +5,7 @@ No Windows, dê dois cliques em “Publicar Tela HD.cmd”. O pacote usa o
 Windows PowerShell 5.1 e o Edge ou Chrome instalado no computador.
 Você precisa ter acesso à rede dos terminais e ao painel de configuração.
 
+<<<<<<< Updated upstream
 1. Pressione Enter para usar 177.74.189.75 ou digite os IPs desejados.
    Separe vários endereços por espaço, vírgula ou ponto e vírgula.
    Para informar a porta, use 177.74.189.75:8686 ou 177.74.189.75/8686.
@@ -14,6 +15,14 @@ Você precisa ter acesso à rede dos terminais e ao painel de configuração.
    de modificação. Também aceita cópias como HDCENTER (1).jpeg. Em caso de
    empate, escolha a cópia desejada. Confira o caminho exibido antes de
    iniciar. A mesma imagem é usada em todo o lote.
+=======
+1. Pressione Enter para usar 177.74.189.75 ou informe os IPs desejados.
+   Separe vários endereços por espaço, vírgula ou ponto e vírgula.
+   Use IP:porta ou IP/porta. O navegador recebe o endereço sem prefixo.
+2. Confira o caminho da imagem antes de iniciar. O script escolhe a imagem
+   HDCENTER mais recente de Downloads pela última modificação, incluindo
+   cópias numeradas, como HDCENTER (1).jpeg. A mesma imagem é usada no lote.
+>>>>>>> Stashed changes
 3. Deixe abertas a janela do script e a do navegador. Quando identificar
    o formulário de login, o script pede a senha de admin para aquele
    terminal na janela do PowerShell. A digitação é oculta. Pressione Enter
@@ -22,6 +31,7 @@ Você precisa ter acesso à rede dos terminais e ao painel de configuração.
    continuar aberto após o envio, o CSV registra a pendência daquele IP.
    Em telas de autenticação diferentes, siga a indicação na janela.
    A senha não é gravada pelo script nem incluída no CSV.
+<<<<<<< Updated upstream
    Se o painel não abrir, confira o IP e a porta indicados no relatório.
 4. Após o login, o script clica em Configuration na barra lateral, abre
    Preference e entra em Screen Display. A janela indica qual menu está
@@ -32,6 +42,19 @@ Você precisa ter acesso à rede dos terminais e ao painel de configuração.
    Em seguida, edita ou cria o programa HD e programa a exibição de
    00:00 a 24:00 nos sete dias.
    Quando for criar HD, confira antes a lista completa de programas.
+=======
+   Se a aba não abrir, confira o IP e a porta no relatório.
+4. Após o login, o script clica em Configuration na barra lateral, abre
+   Preference e entra em Screen Display. A janela indica qual menu está
+   abrindo. Se precisar de ajuda com um clique, ela identifica o item.
+   Após salvar Sleep desativado, o script abre Notice Publication > Media
+   Library Management, clica em Import ou no ícone + e seleciona a imagem
+   HDCENTER escolhida em Downloads. Se já houver uma mídia com
+   esse nome, confira a miniatura. Em Add Program, ele preenche o nome HD,
+   clica em +, seleciona o arquivo pelo nome completo e salva o programa.
+   Se HD já existir, ele edita esse programa. Após conferir a imagem,
+   segue para a programação de 00:00 a 24:00 nos sete dias.
+>>>>>>> Stashed changes
 5. Em telas com controles diferentes, siga a instrução amarela. Digite C
    depois de executar e conferir a etapa, P para registrar uma pendência
    ou I para pular o terminal. Em grades gráficas, o operador verifica

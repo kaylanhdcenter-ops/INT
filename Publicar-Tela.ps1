@@ -15,25 +15,39 @@ $script:library = @('Media Library Management','Gerenciamento da biblioteca de m
 $script:agenda = @('Schedule Management','Gerenciamento de horários','Gerenciamento de agenda','Programação de horários')
 
 function Get-TerminalAddress([string]$value) {
+<<<<<<< Updated upstream
     $value = $value.Trim()
     if (!$value) { throw 'Endereço vazio.' }
     $value = $value -replace '^https?://', ''
     if ($value -notmatch '^(?:[a-z0-9][a-z0-9.-]*|\[[a-f0-9:]+\])(?::\d+)?(?:[/?#][^\s"\\]*)?\z' -or
         $value -match '^[^/?#]+://') { throw "Endereço inválido: $value" }
     # Na entrada do operador, IP/porta e IP:porta indicam a mesma porta de rede.
+=======
+    $value = $value.Trim() -replace '^https?://', ''
+    if ($value -notmatch '^(?:[a-z0-9][a-z0-9.-]*|\[[a-f0-9:]+\])(?::\d+)?(?:[/?#][^\s"\\]*)?\z') { throw "Endereço inválido: $value" }
+>>>>>>> Stashed changes
     if ($value -match '^(?<host>\[[^\]]+\]|[^/:?#]+)/(?<porta>\d+)(?<resto>[/?#].*)?$') {
         $value = $Matches.host + ':' + $Matches.porta + $Matches.resto
     }
     $uri = $null
+<<<<<<< Updated upstream
     if (![Uri]::TryCreate(('tcp://' + $value), [UriKind]::Absolute, [ref]$uri) -or
         !$uri.Host -or $uri.Port -eq 0) { throw "Endereço ou porta inválidos: $value" }
+=======
+    if (![Uri]::TryCreate(('tcp://' + $value), [UriKind]::Absolute, [ref]$uri) -or !$uri.Host -or $uri.Port -eq 0) {
+        throw "Endereço ou porta inválidos: $value"
+    }
+>>>>>>> Stashed changes
     return $value
 }
 
 function Select-ImageFile([string]$path, [string]$folder) {
     $types = @('.png','.jpg','.jpeg','.bmp','.gif','.webp','.tif','.tiff','.ico','.jfif')
     $auto = !$path
+<<<<<<< Updated upstream
     $namePattern = '^HDCENTER(?:\s*\(\d+\))?$'
+=======
+>>>>>>> Stashed changes
     if (!$path) {
         if (!$folder) {
             $folder = (Get-ItemProperty -ErrorAction SilentlyContinue 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders').'{374DE290-123F-4565-9164-39C4925E467B}'
@@ -41,7 +55,11 @@ function Select-ImageFile([string]$path, [string]$folder) {
             else { $folder = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'Downloads' }
         }
         $files = @(Get-ChildItem -File -LiteralPath $folder | Where-Object {
+<<<<<<< Updated upstream
             $_.BaseName -match $namePattern -and $_.Extension -in $types -and $_.Length -gt 0
+=======
+            $_.BaseName -match '^HDCENTER(?:\s*\(\d+\))?$' -and $_.Extension -in $types -and $_.Length -gt 0
+>>>>>>> Stashed changes
         } | Sort-Object LastWriteTimeUtc -Descending)
         if (!$files.Count) { throw "Nenhuma imagem HDCENTER encontrada em $folder." }
         if ($files.Count -eq 1 -or $files[0].LastWriteTimeUtc -ne $files[1].LastWriteTimeUtc) {
@@ -62,8 +80,13 @@ function Select-ImageFile([string]$path, [string]$folder) {
         }
         $item = Get-Item -ErrorAction SilentlyContinue -LiteralPath $path
         if ($item -is [IO.FileInfo] -and $item.Extension -in $types -and $item.Length -gt 0) {
+<<<<<<< Updated upstream
             if (!$auto -or $item.BaseName -match $namePattern) { return $item.FullName }
             Write-Host 'Selecione uma imagem com o nome HDCENTER.'
+=======
+            if (!$auto -or $item.BaseName -match '^HDCENTER(?:\s*\(\d+\))?$') { return $item.FullName }
+            Write-Host 'Escolha uma imagem chamada HDCENTER.'
+>>>>>>> Stashed changes
             $path = $null
             continue
         }
@@ -92,9 +115,13 @@ function Send-Cdp([string]$method, [hashtable]$parameters = @{}) {
                     $stream.Write($buffer,0,$chunk.Count)
                 } until ($chunk.EndOfMessage)
                 $response = [Text.Encoding]::UTF8.GetString($stream.ToArray()) | ConvertFrom-Json
+<<<<<<< Updated upstream
                 if ($response.method -eq 'Page.fileChooserOpened') {
                     $script:chooserNode = $response.params.backendNodeId
                 }
+=======
+                if ($response.method -eq 'Page.fileChooserOpened') { $script:chooserNode = $response.params.backendNodeId }
+>>>>>>> Stashed changes
             } finally { $stream.Dispose() }
         } until ($response.id -eq $id)
         if ($response.error) { throw "$method - $($response.error.message)" }
@@ -165,12 +192,24 @@ function Open-Section([array]$steps) {
     return (Wait-Panel 'active' @{rotulos=$last} 2)
 }
 
+<<<<<<< Updated upstream
 function Open-MenuPath([array]$path) {
     if (Invoke-Panel 'menuReached' $path[-1]) { return $true }
+=======
+function Open-Screen {
+    $menuTimeoutSeconds = 30
+    $path = @(
+        @{rotulos=$script:configuration; proximos=$script:preferences},
+        @{rotulos=$script:preferences; proximos=$script:screen; preference=$true},
+        @{rotulos=$script:screen; proximos=@()}
+    )
+    if (Invoke-Panel 'screenReached' $path[-1]) { return $true }
+>>>>>>> Stashed changes
     foreach ($step in $path) {
-        if (Invoke-Panel 'menuReached' $step) { continue }
+        if (Invoke-Panel 'screenReached' $step) { continue }
         $name = $step.rotulos[0]
         Write-Host "Abrindo $name..."
+<<<<<<< Updated upstream
         $limit = [DateTime]::UtcNow.AddSeconds(8)
         do {
             $point = Invoke-Panel 'menuPoint' $step
@@ -182,11 +221,30 @@ function Open-MenuPath([array]$path) {
             $null = Send-Cdp 'Input.dispatchMouseEvent' @{type='mousePressed';button='left';buttons=1;clickCount=1;x=$point.x;y=$point.y}
             $null = Send-Cdp 'Input.dispatchMouseEvent' @{type='mouseReleased';button='left';buttons=0;clickCount=1;x=$point.x;y=$point.y}
             if (Wait-Panel 'menuReached' $step 8) { continue }
+=======
+        if (Wait-Panel 'clickScreenMenu' $step $menuTimeoutSeconds) {
+            $step.clicado = $true
+            if ($step.proximos.Count) { Write-Host "Aguardando $($step.proximos[0])..." }
+            if (Wait-Panel 'screenReached' $step $menuTimeoutSeconds) { continue }
+            if ($step.proximos.Count) {
+                $next = $step.proximos[0]
+                Ask-Step "Não consegui acessar $next. Se necessário, abra $name e aguarde $next aparecer. Digite C quando $next estiver disponível."
+                continue
+            }
+>>>>>>> Stashed changes
         }
         Ask-Step "Não consegui confirmar a abertura de $name. Clique em $name no painel e digite C para o script continuar."
     }
-    return (Wait-Panel 'menuReached' $path[-1] 3)
+    return (Wait-Panel 'screenReached' $path[-1] 3)
 }
+function Open-Notice {
+    $tab = @{rotulos=$script:notice; tela=$script:screen}
+    if (Invoke-Panel 'noticeReached' $tab) { return $true }
+    Write-Host 'Abrindo a aba Notice Publication...'
+    if (!(Wait-Panel 'clickNotice' $tab 30)) { return $false }
+    return (Wait-Panel 'noticeReached' $tab 30)
+}
+<<<<<<< Updated upstream
 function Open-Screen {
     return (Open-MenuPath @(
         @{rotulos=$script:configuration; proximos=$script:preferences},
@@ -200,6 +258,19 @@ function Open-Library {
         @{rotulos=$script:notice; proximos=$script:library},
         @{rotulos=$script:library; tela='library'}
     ))
+=======
+function Open-Library {
+    $library = @{rotulos=$script:library}
+    if (Invoke-Panel 'active' $library) { return $true }
+    if (!(Open-Notice)) { return $false }
+    if (Invoke-Panel 'active' $library) { return $true }
+    Write-Host 'Abrindo Media Library Management...'
+    if (!(Wait-Panel 'clickScreenMenu' $library 30)) { return $false }
+    return (Wait-Panel 'active' $library 30)
+}
+function Open-Agenda {
+    return (Open-Section @(@{rotulos=$script:notice; proximos=$script:agenda},@{rotulos=$script:agenda}))
+>>>>>>> Stashed changes
 }
 function Open-Agenda { return (Open-Section @(@{labels=$script:notice},@{labels=$script:agenda})) }
 
@@ -224,21 +295,41 @@ function Wait-Save {
 }
 
 function Set-Screen {
+    $confirmed = $false
     $opened = Open-Screen
-    if (!$opened -or !(Wait-Panel 'sleepReady' @{} 5)) {
+    if (!$opened) { throw 'A abertura de Preference > Screen Display não foi confirmada.' }
+    if (!(Wait-Panel 'sleepReady' @{} 5)) {
+        if (!(Invoke-Panel 'screenReached' @{rotulos=$script:screen})) { throw 'Screen Display deixou de estar aberto.' }
         Ask-Step 'Em Screen Display, confira Sleep, desative se necessário e clique em Save. Aguarde a confirmação.'
+        $confirmed = $true
     } else {
         if (Invoke-Panel 'sleep') {
             Write-Host 'Desativando Sleep...'
             $null = Invoke-Panel 'disable'
         }
         if (!(Wait-Panel 'sleepOff' @{} 5) -or !(Wait-Panel 'saveSleep' @{} 3)) {
+            if (!(Invoke-Panel 'screenReached' @{rotulos=$script:screen})) { throw 'Screen Display deixou de estar aberto.' }
             Ask-Step 'Em Screen Display, confirme Sleep desativado, salve a seção e aguarde a confirmação.'
+            $confirmed = $true
         } else {
             Write-Host 'Clique em Save enviado.'
-            Wait-Save
+            $limit = [DateTime]::UtcNow.AddSeconds(5)
+            do {
+                $result = Invoke-Panel 'screenSaveResult'
+                if ($result -eq 'falha') { throw 'O painel informou falha ao salvar Screen Display.' }
+                if ($result -eq 'salvo') { $confirmed = $true; break }
+                Start-Sleep -Milliseconds 200
+            } while ([DateTime]::UtcNow -lt $limit)
         }
     }
+<<<<<<< Updated upstream
+=======
+    if ($confirmed) {
+        if ((Invoke-Panel 'sleep') -eq $true) { throw 'Sleep continuou ativado após salvar.' }
+        return 'Confirmado no salvamento'
+    }
+    Write-Host 'Conferindo o Sleep gravado antes de abrir Notice Publication...'
+>>>>>>> Stashed changes
     Reload-Panel
     $opened = Open-Screen
     if ($opened -and (Wait-Panel 'sleepReady' @{} 5)) {
@@ -257,6 +348,7 @@ function Import-Media {
         throw 'Já existe outra mídia com esse nome. Use um arquivo com nome distinto para evitar associação incorreta.'
     }
     Write-Host "Importando $script:fileName na biblioteca..."
+<<<<<<< Updated upstream
     $fileId = Invoke-Panel 'file' @{} -Object
     $script:chooserNode = $null
     $intercept = $false
@@ -282,11 +374,34 @@ function Import-Media {
             $null = Send-Cdp 'DOM.setFileInputFiles' $params
             $selected = $true
         }
+=======
+    $fileId = $null
+    $script:chooserNode = $null
+    $intercept = $false
+    try {
+        $null = Send-Cdp 'Page.enable'
+        $null = Send-Cdp 'Page.setInterceptFileChooserDialog' @{enabled=$true}
+        $intercept = $true
+        $null = Wait-Panel 'openImport' @{} 5
+        $plusClicked = $false
+        $limit = [DateTime]::UtcNow.AddSeconds(8)
+        do {
+            $fileId = Invoke-Panel 'file' @{} -Object
+            if ($script:chooserNode -or $fileId) { break }
+            if (!$plusClicked) { $plusClicked = Invoke-Panel 'uploadPlus' }
+            Start-Sleep -Milliseconds 200
+        } while ([DateTime]::UtcNow -lt $limit)
+        $params = @{files=@($script:imagePath)}
+        if ($script:chooserNode) { $params.backendNodeId = $script:chooserNode }
+        elseif ($fileId) { $params.objectId = $fileId }
+        if ($params.Count -gt 1) { $null = Send-Cdp 'DOM.setFileInputFiles' $params }
+>>>>>>> Stashed changes
     } finally {
         if ($intercept) { $null = Send-Cdp 'Page.setInterceptFileChooserDialog' @{enabled=$false} }
         if ($fileId) { $null = Send-Cdp 'Runtime.releaseObject' @{objectId=$fileId} }
         $script:chooserNode = $null
     }
+<<<<<<< Updated upstream
     if (!$selected) {
         Ask-Step "Em Media Library Management, use Import para selecionar '$script:imagePath'. Confirme quando a imagem aparecer na biblioteca."
         return
@@ -295,33 +410,51 @@ function Import-Media {
         $null = Invoke-Panel 'confirmImport'
         if (!(Wait-Panel 'media' @{} 15)) {
             Ask-Step "O arquivo já foi selecionado. Confira o andamento da importação e confirme quando '$script:fileName' aparecer na biblioteca."
+=======
+    if ($params.Count -eq 1) {
+        Ask-Step "Em Media Library Management, clique em Import ou no ícone + e selecione '$script:imagePath'. Confirme quando a imagem aparecer na biblioteca."
+    } elseif (!(Wait-Panel 'media' @{} 2)) {
+        $null = Invoke-Panel 'confirmImport'
+        if (!(Wait-Panel 'media' @{} 15)) {
+            Ask-Step "Confira o andamento da importação e confirme quando '$script:fileName' aparecer na biblioteca."
+>>>>>>> Stashed changes
         }
     }
 }
 
 function Set-Program {
-    $opened = Open-Notice
-    if (!$opened) { Ask-Step 'Abra Notice Publication e exiba a lista de programas.' }
-    $existing = (Invoke-Panel 'openHD') -and (Wait-Panel 'editor')
-    if (!$existing) {
-        if (Ask-Yes 'Confira a lista completa, inclusive outras páginas. Já existe o programa HD?') {
-            Ask-Step 'Abra o programa HD existente para edição.'
+    if (!(Invoke-Panel 'editor')) {
+        if (Invoke-Panel 'closeLibrary') { $null = Wait-Panel 'programList' @{} 3 }
+        if (!(Invoke-Panel 'programList')) {
+            $null = Open-Notice
+            if (!(Wait-Panel 'programList' @{} 5)) { Ask-Step 'Em Notice Publication, exiba a lista de programas.' }
+        }
+        if (Invoke-Panel 'openHD') {
+            if (!(Wait-Panel 'editor' @{} 8)) { Ask-Step 'Abra a edição do programa HD existente.' }
         } else {
-            $added = Invoke-Panel 'click' @{rotulos=@('Add Program','Adicionar programa')}
-            if ($added) { Start-Sleep -Milliseconds 350 }
-            if (!$added -or !(Invoke-Panel 'nameHD') -or !(Wait-Panel 'editor')) {
-                Ask-Step 'Abra Add Program, dê o nome HD ao novo programa e deixe o editor aberto.'
+            $create = $true
+            if (Invoke-Panel 'checkProgramList') {
+                $create = !(Ask-Yes 'Confira a lista completa de programas. Já existe HD?')
+            }
+            if ($create) {
+                Write-Host 'Abrindo Add Program e preenchendo o nome HD...'
+                if (!(Wait-Panel 'addProgram' @{} 5) -or !(Wait-Panel 'nameHD' @{} 8)) {
+                    Ask-Step 'Abra Add Program, preencha o nome HD e deixe o editor aberto.'
+                } else { $null = Invoke-Panel 'confirmName' }
+            } else { Ask-Step 'Abra o programa HD existente para edição.' }
+            if (!(Wait-Panel 'editor' @{} 8)) {
+                Ask-Step 'Confirme o nome HD e abra o editor desse programa.'
             }
         }
     }
     if (!(Invoke-Panel 'inProgram')) {
         $picked = $false
-        if (Invoke-Panel 'addImage') {
-            Start-Sleep -Milliseconds 350
-            $picked = Invoke-Panel 'pick'
-            if ($picked -and !(Wait-Panel 'inProgram' @{} 1)) { $null = Invoke-Panel 'acceptPicker' }
+        Write-Host "Adicionando '$script:fileName' pelo botão + do programa HD..."
+        if (Wait-Panel 'addImage' @{} 8) {
+            $picked = Wait-Panel 'pick' @{} 10
+            if ($picked -and !(Wait-Panel 'inProgram' @{} 1)) { $null = Wait-Panel 'acceptPicker' @{} 4 }
         }
-        if (!$picked -or !(Wait-Panel 'inProgram')) {
+        if (!$picked -or !(Wait-Panel 'inProgram' @{} 8)) {
             Ask-Step "No editor de HD, confira as imagens já associadas. Se '$script:fileName' estiver ausente, use + para incluí-la uma vez. Confira a miniatura no programa."
         }
     }
@@ -350,7 +483,7 @@ function Set-Agenda {
 }
 
 function Confirm-Program {
-    $opened = Open-Notice
+    $opened = (Invoke-Panel 'programList') -or (Open-Notice)
     if ($opened -and (Invoke-Panel 'openHD') -and (Wait-Panel 'inProgram')) { return 'Confirmado na releitura' }
     Ask-Step "Na tela recarregada, abra o programa HD e confira '$script:fileName' entre as imagens salvas nele."
     return 'Conferido pelo operador após recarga'
@@ -463,7 +596,10 @@ function Open-Terminal {
     $list = "$script:local/json/list"
     $oldIds = (Invoke-RestMethod -UseBasicParsing -TimeoutSec 5 -Uri $list).id
     $expected = [Uri]('tcp://' + $script:address)
+<<<<<<< Updated upstream
     # O navegador interpreta o argumento sem prefixo e abre a aba no perfil do lote.
+=======
+>>>>>>> Stashed changes
     Start-Process -FilePath $script:browserExe -ArgumentList @(
         "--user-data-dir=`"$script:browserProfile`"", "`"$script:address`"")
     $limit = [DateTime]::UtcNow.AddSeconds(20)
@@ -488,7 +624,11 @@ function Open-Terminal {
 function Publish-Batch {
     if ([string]::CompareOrdinal($Inicio,$Fim) -ge 0 -or [string]::IsNullOrWhiteSpace($Dias)) { throw 'Indique os dias e um intervalo com início anterior ao fim.' }
     if (!$Terminais) {
+<<<<<<< Updated upstream
         $inputAddress = Read-Host 'IP dos terminais (Enter para 177.74.189.75). Use IP:porta ou IP/porta. Separe vários por espaço, vírgula ou ponto e vírgula'
+=======
+        $inputAddress = Read-Host 'IP dos terminais (Enter para 177.74.189.75). Use IP:porta ou IP/porta'
+>>>>>>> Stashed changes
         $Terminais = if ($inputAddress.Trim()) { $inputAddress } else { '177.74.189.75' }
     }
     $targets = [ordered]@{}
@@ -516,6 +656,10 @@ function Publish-Batch {
         if (!$held) { throw 'Outro lote está em andamento neste computador.' }
         $fileLock = [IO.File]::Open($script:imagePath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
         Start-PanelBrowser (Join-Path $env:LOCALAPPDATA 'PublicacaoTelaHD\Navegador')
+<<<<<<< Updated upstream
+=======
+        $batchHasPending = $false
+>>>>>>> Stashed changes
         foreach ($script:address in $targets.Keys) {
             $script:target = $targets[$script:address]
             Write-Host "`nTerminal $script:target" -ForegroundColor Cyan

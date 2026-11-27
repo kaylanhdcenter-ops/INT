@@ -2,9 +2,14 @@
 function painel(acao, dados) {
   const norm = v => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .trim().replace(/\s+/g, ' ').toLowerCase();
+<<<<<<< Updated upstream
   if (!['http:','https:'].includes(location.protocol)) return null;
   const terminal = new URL('//' + dados.endereco, location.href);
   if (location.origin !== terminal.origin) return null;
+=======
+  if (!['http:','https:'].includes(location.protocol) ||
+      new URL('//' + dados.endereco,location.href).origin !== location.origin) return null;
+>>>>>>> Stashed changes
   const docs = [document];
   for (const doc of docs) {
     for (const frame of doc.querySelectorAll('iframe,frame')) {
@@ -29,9 +34,13 @@ function painel(acao, dados) {
   const click = el => { if (!el) return false; el.click(); return true; };
   const headings = 'h1,h2,h3,h4,legend,[role=heading],[role=tab][aria-selected=true],nav [aria-current=page]';
   const active = labels => all(headings).some(e => vis(e) && matches(e, labels));
-  function menuLabel(labels) {
+  function menuLabel(labels, preferText = false) {
     const selector = buttons + ',li,div,span,p,strong,b,em,label,dt,dd,td,summary,[aria-expanded],[onclick],[title],[aria-label]';
-    const candidates = all(selector).filter(e => usable(e) && matches(e, labels));
+    let candidates = all(selector).filter(e => usable(e) && matches(e, labels));
+    if (preferText) {
+      const exact = candidates.filter(e => labels.map(norm).includes(norm(e.innerText)));
+      candidates = exact.length ? exact : candidates.filter(e => !norm(e.innerText));
+    }
     // A legenda pode ser só texto dentro do item que recebe o evento.
     // Prefira a barra lateral ao cartão de mesmo nome na página Overview.
     const sidebar = e => {
@@ -61,8 +70,27 @@ function painel(acao, dados) {
     const mark = item?.closest('[aria-current=page],[aria-selected=true],[aria-expanded=true],.active,.is-active,.selected,.router-link-active');
     return !!mark && (mark === item || matches(mark,labels));
   }
-  function menuPoint(labels, expand) {
-    let el = menuLabel(labels);
+  function noticeTab() {
+    // No Preference, as duas abas são irmãs. A barra lateral pode repetir o nome.
+    const selector = buttons + ',li,span,div,label';
+    const screens = all(selector).filter(e => usable(e) && dados.tela.map(norm).includes(norm(e.innerText)));
+    const notices = all(selector).filter(e => usable(e) && dados.rotulos.map(norm).includes(norm(e.innerText)));
+    const leaves = notices.filter(e => !notices.some(child => e !== child && e.contains(child)));
+    const siblings = new Set();
+    for (const screen of screens) {
+      for (let bar = screen.parentElement; bar && !bar.matches('body,main,[role=main]'); bar = bar.parentElement) {
+        if (bar.querySelector('main,[role=main],[role=tabpanel],form')) break;
+        const peers = leaves.filter(e => bar.contains(e));
+        if (peers.length) {
+          if (peers.length === 1) siblings.add(peers[0]);
+          break;
+        }
+      }
+    }
+    return siblings.size ? one([...siblings]) : menuLabel(dados.rotulos,true);
+  }
+  function menuTarget(labels, expand, preferText = false) {
+    let el = menuLabel(labels, preferText);
     if (!el) return null;
     if (expand) {
       // Alguns firmwares usam uma seta separada do texto para abrir o submenu.
@@ -70,8 +98,13 @@ function painel(acao, dados) {
       const toggle = row && one(all('[aria-expanded=false]',row).filter(e =>
         usable(e) && (!e.closest('li,[role=treeitem],[role=menuitem]') ||
           e.closest('li,[role=treeitem],[role=menuitem]') === row)));
-      if (toggle && (toggle.contains(el) || matches(row,labels))) el = toggle;
+      if (toggle && (toggle.contains(el) || labels.map(norm).includes(norm(row.innerText)))) el = toggle;
     }
+    return el;
+  }
+  function menuPoint(labels, expand) {
+    const el = menuTarget(labels, expand);
+    if (!el) return null;
     el.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});
     const rect = el.getBoundingClientRect();
     let doc = el.ownerDocument, win = doc.defaultView;
@@ -88,6 +121,11 @@ function painel(acao, dados) {
       win = doc.defaultView;
     }
     return {x,y};
+  }
+  function smartSettingsVisible() {
+    const titles = ['face recognition parameters','parâmetros de reconhecimento facial'].map(norm);
+    return all('h1,h2,h3,h4,h5,legend,[role=heading],span,div,p,b,strong,label,td').some(e =>
+      titles.includes(norm(e.textContent)) && vis(e) && titles.includes(norm(e.innerText)));
   }
   function scope(el) {
     // Atuar no conteúdo do painel, inclusive em formulários dentro de iframes.
@@ -168,6 +206,7 @@ function painel(acao, dados) {
     return all('img,[title],[aria-label],span,td,li,div,button,a,label,figcaption',root).filter(e => vis(e) &&
       [e.title,e.alt,e.getAttribute('aria-label'),!e.children.length && e.textContent?.trim()].includes(name));
   }
+<<<<<<< Updated upstream
   const dialog = () => one(all('dialog[open],[role=dialog],.modal.show').filter(vis));
   const importLabels = ['Import','Importar','Upload','Enviar imagem','Import Image','Importar imagem'];
   const modalSelector = 'dialog[open],[role=dialog],.modal.show,.el-dialog,.ant-modal,.layui-layer';
@@ -189,6 +228,29 @@ function painel(acao, dados) {
   function uploadDialog(root) {
     return one(all(modalSelector,root.ownerDocument).filter(d => vis(d) && !d.contains(root) &&
       (d.querySelector('input[type=file]') || all(headings,d).some(e => matches(e,importLabels)))));
+=======
+  const modal = 'dialog[open],[role=dialog],.modal.show,.el-dialog,.ant-modal,.layui-layer';
+  const dialogs = () => all(modal).filter(vis);
+  const importLabels = ['Import','Importar','Upload','Import Image','Importar imagem','+ Import','+ Importar'];
+  function libraryModal() {
+    return one(dialogs().filter(d => matches(d,dados.biblioteca) ||
+      all(headings + ',div,span',d).some(e => vis(e) && matches(e,dados.biblioteca))));
+  }
+  function libraryRoot() {
+    const popup = libraryModal();
+    if (popup) return popup;
+    const anchor = one(all(headings).filter(e => vis(e) && matches(e,dados.biblioteca)));
+    const linked = anchor?.ownerDocument.getElementById(anchor.getAttribute('aria-controls'));
+    if (linked && vis(linked)) return linked;
+    if (scope(anchor)) return scope(anchor);
+    const doc = menuSelected(dados.biblioteca) && menuLabel(dados.biblioteca)?.ownerDocument;
+    return doc && (one(all('[role=tabpanel]',doc).filter(vis)) || one(all('main',doc).filter(vis)) || doc.body);
+  }
+  function uploadDialog(root) {
+    return one(dialogs().filter(d => d.ownerDocument === root.ownerDocument && !d.contains(root) &&
+      (d.querySelector('input[type=file]') || matches(d,importLabels) ||
+        all(headings + ',.el-dialog__title,.ant-modal-title',d).some(e => matches(e,importLabels)))));
+>>>>>>> Stashed changes
   }
   function setValue(el, value) {
     const win = el.ownerDocument.defaultView;
@@ -237,22 +299,50 @@ function painel(acao, dados) {
       return true;
     };
   }
-  const editorTitles = ['HD','Edit Program','Editar programa','Add Program','Adicionar programa'];
-  const field = () => one(all('input:not([type]),input[type=text]').filter(e => usable(e) &&
-    associated(e).some(n => ['program name','nome do programa','nome da programacao'].includes(n))));
-  const editor = () => (field()?.value === 'HD' || active(['HD']) ||
-    (active(editorTitles) && all('input').some(e => vis(e) && e.value === 'HD')));
-  function programRoot() {
-    if (!editor()) return null;
-    if (field()?.value === 'HD') return scope(field());
-    return scope(one(all(headings).filter(e => vis(e) && matches(e,['HD']))));
+  const addTitles = ['Add Program','Adicionar programa','+ Add Program','+ Adicionar programa'];
+  const editorTitles = [...addTitles,'Edit Program','Editar programa','HD'];
+  function field() {
+    const inputs = all('input:not([type]),input[type=text]').filter(usable);
+    const named = inputs.filter(e => [...associated(e),norm(e.name),norm(e.previousElementSibling?.innerText)]
+      .some(n => /^(program[ _-]?name|nome do programa|nome da programacao)\s*[:*]?$/.test(n)));
+    if (named.length) return one(named);
+    const form = one(dialogs().filter(d => matches(d,editorTitles) ||
+      all(headings + ',.el-dialog__title,.ant-modal-title',d).some(e => vis(e) && matches(e,editorTitles))));
+    return form && one(inputs.filter(e => form.contains(e)));
   }
+  function programRoot() {
+    const f = field();
+    if (f && f.value !== 'HD') return null;
+    const anchor = f || one(all(headings).filter(e => vis(e) && matches(e,['HD'])));
+    return anchor?.closest(modal) || anchor?.closest('form,[role=tabpanel]') || scope(anchor);
+  }
+  const editor = () => !!programRoot();
+  const hdRows = () => all('tr,[role=row]').filter(r => vis(r) && [...r.children].some(c => c.innerText?.trim() === 'HD'));
   function openHD() {
     if (editor()) return true;
-    const rows = all('tr,[role=row]').filter(r => vis(r) && [...r.children].some(c => c.innerText?.trim() === 'HD'));
+    const rows = hdRows();
     if (rows.length > 1) return false;
-    const edit = rows.length ? action(['Edit','Editar','HD'],rows[0]) : action(['HD']);
+    const edit = rows.length ? action(['Edit','Editar'],rows[0]) || action(['HD'],rows[0]) : action(['HD']);
     return click(edit);
+  }
+  function addImageButton(root, labels = ['Add image','Adicionar imagem']) {
+    const allowed = [...labels,'+','＋'];
+    const named = action(allowed,root);
+    if (named) return named;
+    const icons = all('.el-icon-plus,.anticon-plus,.fa-plus,.ivu-icon-md-add,.h-icon-plus,.h-icon-add,.icon-plus,.icon-add,[data-icon=plus],use[href$="#icon-plus"]',root).filter(vis);
+    const targets = icons.map(e => e.closest(buttons + ',label,[onclick]') || e.closest('svg')?.parentElement || e);
+    return one([...new Set(targets)].filter(e => root.contains(e) && usable(e) &&
+      (!names(e).length || matches(e,allowed))));
+  }
+  function picker() {
+    const root = programRoot();
+    const choices = dialogs().filter(d => d !== root && !(root && d.contains(root)));
+    return one(choices.filter(d => !choices.some(inner => d !== inner && d.contains(inner))));
+  }
+  function imageInProgram() {
+    const root = programRoot();
+    return !!root && !picker() && fileMatches(root).some(e =>
+      !e.closest('[role=listbox]') && (!e.closest(modal) || e.closest(modal).contains(root)));
   }
   function schedule() {
     const keys = {
@@ -303,8 +393,41 @@ function painel(acao, dados) {
     }
     case 'success': return all('[role=status],[role=alert],.toast,.el-message,.ant-message-notice').some(e => vis(e) &&
       /^(saved successfully|successfully saved|save successful|salvo com sucesso|salva com sucesso|alterações salvas|configurações salvas)[.!]?$/i.test(e.innerText.trim()));
-    case 'active': return active(dados.rotulos);
+    case 'screenSaveResult': {
+      const messages = all('[role=status],[role=alert],[role=alertdialog],dialog[open],[role=dialog],.toast,.el-message,.ant-message-notice,.layui-layer-content,.el-message-box,.tips');
+      for (const el of messages.filter(vis)) {
+        const msg = norm(el.innerText).replace(/\s+(ok|fechar|close)$/,'').trim();
+        if (/\b(failed|failure|error|falha|erro|not saved|nao (foi )?salv[oa])\b/.test(msg)) return 'falha';
+        if (/^(?:(?:parameters|settings|configuration)\s+)?(?:saved(?: successfully)?|save successful|save succeeded|successfully saved|(?:alteracoes |configuracoes )?salv[oa]s?(?: com sucesso)?)[.!]?$/.test(msg)) {
+          const popup = el.closest(modal + ',[role=alertdialog],.el-message-box');
+          if (popup) click(action(['OK','Close','Fechar'],popup));
+          return 'salvo';
+        }
+      }
+      return null;
+    }
+    case 'clickNotice': return click(noticeTab());
+    case 'noticeReached': {
+      const el = noticeTab();
+      const selected = el?.closest('[role=tab],li,a,button') || el;
+      if (selected?.matches('[aria-selected=true],[aria-current=page],.active,.is-active,.selected')) return true;
+      return !sleepControl() && (active(dados.rotulos) || !!action(addTitles) || !!menuLabel(dados.biblioteca,true));
+    }
+    case 'active': return dados.rotulos.some(n => dados.biblioteca.includes(n)) ? !!libraryRoot() : active(dados.rotulos);
     case 'menuPoint': return menuPoint(dados.rotulos, dados.proximos?.length);
+    case 'clickScreenMenu': {
+      const el = menuTarget(dados.rotulos, dados.proximos?.length, true);
+      if (!el || el.closest(':disabled,[aria-disabled=true]')) return false;
+      // O clique segue o elemento mesmo se o menu rolar ou mudar de posição.
+      return click(el);
+    }
+    case 'screenReached': {
+      if (dados.proximos?.length) {
+        if (dados.preference && !dados.clicado && smartSettingsVisible()) return false;
+        return !!menuLabel(dados.proximos,true);
+      }
+      return !smartSettingsVisible() && (menuSelected(dados.rotulos) || state(sleepControl()) !== null);
+    }
     case 'menuReached': return dados.proximos?.length
       ? !!menuLabel(dados.proximos)
       : dados.tela === 'library' ? !!libraryRoot()
@@ -314,6 +437,7 @@ function painel(acao, dados) {
     case 'sleepReady': return state(sleepControl()) !== null;
     case 'sleepOff': return state(sleepControl()) === false;
     case 'disable': {
+      if (smartSettingsVisible()) return false;
       const el = sleepControl();
       if (state(el) !== true || el.closest(':disabled,[aria-disabled=true],.is-disabled')) return false;
       const target = el.matches('input,[role=switch],[role=checkbox],[aria-pressed]') ? el :
@@ -321,6 +445,7 @@ function painel(acao, dados) {
       return !target.matches(':disabled,[aria-disabled=true]') && click(target);
     }
     case 'saveSleep': {
+      if (smartSettingsVisible()) return false;
       const el = sleepControl();
       if (state(el) !== false) return false;
       const root = el.closest('form,section,fieldset,[role=tabpanel]');
@@ -329,6 +454,7 @@ function painel(acao, dados) {
     case 'media': {
       const root = libraryRoot();
       return !!root && !uploadDialog(root) && fileMatches(root).some(e =>
+<<<<<<< Updated upstream
         !e.closest('label,[role=alert],[role=status],.el-upload-list,.ant-upload-list'));
     }
     case 'openImport': {
@@ -338,6 +464,20 @@ function painel(acao, dados) {
     case 'confirmImport': {
       const root = libraryRoot();
       const d = root && uploadDialog(root);
+=======
+        !e.closest('label,[role=status],[role=alert],.el-upload-list,.ant-upload-list'));
+    }
+    case 'openImport': {
+      const root = libraryRoot();
+      return !!root && !uploadDialog(root) && click(action(importLabels,root) || addImageButton(root,importLabels));
+    }
+    case 'uploadPlus': {
+      const root = libraryRoot(), d = root && uploadDialog(root);
+      return !!d && click(addImageButton(d,['Choose file','Selecionar arquivo','Browse','Procurar']));
+    }
+    case 'confirmImport': {
+      const root = libraryRoot(), d = root && uploadDialog(root);
+>>>>>>> Stashed changes
       return !!d && click(action([...importLabels,'OK','Confirm','Confirmar'],d));
     }
     case 'file': {
@@ -348,24 +488,40 @@ function painel(acao, dados) {
     }
     case 'editor': return editor();
     case 'openHD': return openHD();
+    case 'programList': return !dialogs().length && !!action(addTitles);
+    case 'closeLibrary': {
+      const d = libraryModal();
+      return !!d && click(action(['Close','Fechar','Back','Voltar','×'],d));
+    }
+    case 'checkProgramList': return hdRows().length > 0 || !!action(['HD']) ||
+      all('.pagination,.el-pagination,.ant-pagination,[aria-label*=pagination i],[aria-busy=true]').some(vis);
+    case 'addProgram': return !dialogs().length && click(action(addTitles));
     case 'nameHD': {
       const f = field();
-      if (!f || (f.value && f.value !== 'HD')) return false;
+      if (!f || f.readOnly) return false;
       setValue(f,'HD'); return f.value === 'HD';
     }
-    case 'inProgram': {
+    case 'confirmName': {
       const root = programRoot();
-      return !!root && !dialog() && fileMatches(root).length > 0;
+      return !!root && root.matches(modal) && !addImageButton(root) &&
+        click(action(['OK','Next','Avançar','Confirm','Confirmar'],root));
     }
-    case 'addImage': { const root = programRoot(); return !!root && click(action(['+','Add image','Adicionar imagem'],root)); }
+    case 'inProgram': return imageInProgram();
+    case 'addImage': { const root = programRoot(); return !!root && !picker() && click(addImageButton(root)); }
     case 'pick': {
-      const d = dialog();
+      const d = picker();
       if (!d) return false;
-      const targets = fileMatches(d).map(e => e.closest('button,a,label,[role=option],[role=button]') || (e.onclick ? e : null));
-      return click(one([...new Set(targets.filter(Boolean))]));
+      const targets = fileMatches(d).map(e => {
+        const row = e.closest('tr,[role=row],li,figure');
+        const check = row && one(all('input[type=checkbox],input[type=radio]',row));
+        return check || e.closest('button,a,label,[role=option],[role=button],[onclick]') || row || e;
+      });
+      const target = one([...new Set(targets)]);
+      return !!target && !target.matches(':disabled,[aria-disabled=true]') &&
+        (target.checked === true || target.getAttribute('aria-selected') === 'true' || click(target));
     }
-    case 'acceptPicker': { const d = dialog(); return d && click(action(['OK','Confirm','Confirmar','Adicionar','Add'],d)); }
-    case 'saveProgram': { const root = programRoot(); return !!root && !dialog() && click(action(save,root)); }
+    case 'acceptPicker': { const d = picker(); return !!d && click(action(['OK','Confirm','Confirmar','Adicionar','Add'],d)); }
+    case 'saveProgram': { const root = programRoot(); return !!root && !picker() && click(action(save,root)); }
     case 'schedule': {
       const plan = schedule();
       if (!plan) return null;
