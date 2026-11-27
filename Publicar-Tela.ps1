@@ -151,14 +151,29 @@ function Ask-Yes([string]$text) {
     }
 }
 
-function Open-Section([array]$steps) {
-    $last = $steps[-1].labels
-    if (Invoke-Panel 'active' @{rotulos=$last}) { return $true }
-    foreach ($step in $steps) {
-        if (Invoke-Panel 'active' @{rotulos=$last}) { return $true }
-        if (Invoke-Panel 'click' @{rotulos=$step.labels}) { Start-Sleep -Milliseconds 450 }
+function Click-PanelMenu([hashtable]$step, [int]$seconds = 30) {
+    $limit = [DateTime]::UtcNow.AddSeconds($seconds)
+    do {
+        $point = Invoke-Panel 'menuPoint' $step
+        if ($point) {
+            $null = Send-Cdp 'Input.dispatchMouseEvent' @{type='mouseMoved';x=$point.x;y=$point.y}
+            $null = Send-Cdp 'Input.dispatchMouseEvent' @{type='mousePressed';button='left';buttons=1;clickCount=1;x=$point.x;y=$point.y}
+            $null = Send-Cdp 'Input.dispatchMouseEvent' @{type='mouseReleased';button='left';buttons=0;clickCount=1;x=$point.x;y=$point.y}
+            return $true
+        }
+        Start-Sleep -Milliseconds 250
+    } while ([DateTime]::UtcNow -lt $limit)
+    return $false
+}
+
+function Open-Section([array]$path) {
+    $last = $path[-1]
+    foreach ($step in $path) {
+        if (Invoke-Panel 'active' $last) { return $true }
+        if ($step.proximos.Count -and (Invoke-Panel 'menuReached' $step)) { continue }
+        if (!(Click-PanelMenu $step)) { return $false }
     }
-    return (Wait-Panel 'active' @{rotulos=$last} 2)
+    return (Wait-Panel 'active' $last 30)
 }
 
 function Open-Screen {
@@ -173,16 +188,7 @@ function Open-Screen {
         if (Invoke-Panel 'menuReached' $step) { continue }
         $name = $step.rotulos[0]
         Write-Host "Abrindo $name..."
-        $limit = [DateTime]::UtcNow.AddSeconds($menuTimeoutSeconds)
-        do {
-            $point = Invoke-Panel 'menuPoint' $step
-            if ($point) { break }
-            Start-Sleep -Milliseconds 250
-        } while ([DateTime]::UtcNow -lt $limit)
-        if ($point) {
-            $null = Send-Cdp 'Input.dispatchMouseEvent' @{type='mouseMoved';x=$point.x;y=$point.y}
-            $null = Send-Cdp 'Input.dispatchMouseEvent' @{type='mousePressed';button='left';buttons=1;clickCount=1;x=$point.x;y=$point.y}
-            $null = Send-Cdp 'Input.dispatchMouseEvent' @{type='mouseReleased';button='left';buttons=0;clickCount=1;x=$point.x;y=$point.y}
+        if (Click-PanelMenu $step $menuTimeoutSeconds) {
             if ($step.proximos.Count) { Write-Host "Aguardando $($step.proximos[0])..." }
             if (Wait-Panel 'menuReached' $step $menuTimeoutSeconds) { continue }
             if ($step.proximos.Count) {
@@ -195,9 +201,13 @@ function Open-Screen {
     }
     return (Wait-Panel 'menuReached' $path[-1] 3)
 }
-function Open-Notice { return (Open-Section @(@{labels=$script:notice})) }
-function Open-Library { return (Open-Section @(@{labels=$script:notice},@{labels=$script:library})) }
-function Open-Agenda { return (Open-Section @(@{labels=$script:notice},@{labels=$script:agenda})) }
+function Open-Notice { return (Open-Section @(@{rotulos=$script:notice})) }
+function Open-Library {
+    return (Open-Section @(@{rotulos=$script:notice; proximos=$script:library},@{rotulos=$script:library}))
+}
+function Open-Agenda {
+    return (Open-Section @(@{rotulos=$script:notice; proximos=$script:agenda},@{rotulos=$script:agenda}))
+}
 
 function Reload-Panel {
     # Espera pela substituição do documento mesmo quando a URL continua igual.
@@ -234,6 +244,10 @@ function Set-Screen {
             Write-Host 'Clique em Save enviado.'
             Wait-Save
         }
+    }
+    if (Invoke-Panel 'menuPoint' @{rotulos=$script:notice; proximos=$script:library}) {
+        if ((Invoke-Panel 'sleep') -eq $true) { throw 'Sleep continuou ativado após salvar.' }
+        return 'Confirmado no salvamento'
     }
     Reload-Panel
     $opened = Open-Screen
