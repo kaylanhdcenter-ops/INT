@@ -457,6 +457,7 @@ function Publish-Batch {
         if (!$held) { throw 'Outro lote está em andamento neste computador.' }
         $fileLock = [IO.File]::Open($script:imagePath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
         Start-PanelBrowser (Join-Path $env:LOCALAPPDATA 'PublicacaoTelaHD\Navegador')
+        $batchHasPending = $false
         foreach ($script:target in $targets) {
             Write-Host "`nTerminal $script:target" -ForegroundColor Cyan
             $stage = 'Acesso'
@@ -464,11 +465,7 @@ function Publish-Batch {
             try {
                 Open-Terminal
                 $stage = 'Screen Display'
-                try { $row.Sleep = Set-Screen } catch {
-                    if ($_.Exception.Message -like 'PULAR IP.*') { throw }
-                    $row.Motivo = "Screen Display - $($_.Exception.Message)"
-                    Write-Host $row.Motivo -ForegroundColor Yellow
-                }
+                $row.Sleep = Set-Screen
                 $stage = 'Biblioteca'
                 Import-Media
                 $row.Biblioteca = 'Imagem identificada'
@@ -484,13 +481,15 @@ function Publish-Batch {
                 Reload-Panel
                 $row.Agenda = Confirm-Agenda
             } catch {
-                $row.Motivo = (@($row.Motivo,("$stage - " + $_.Exception.Message)) | Where-Object { $_ }) -join ' | '
+                $batchHasPending = $true
+                $row.Motivo = "$stage - $($_.Exception.Message)"
             } finally { Close-Tab }
             $record = [pscustomobject]$row
             $record | Export-Csv -LiteralPath $report -Delimiter ';' -NoTypeInformation -Encoding UTF8 -Append
             $record | Format-List | Out-Host
         }
         Write-Host "Relatório do lote: $report"
+        if ($batchHasPending) { throw 'O lote terminou com pendências. Consulte o relatório.' }
     } finally {
         if ($script:local) {
             try { Connect-Tab; $null = Send-Cdp 'Browser.close' } catch {} finally { Close-Tab }
