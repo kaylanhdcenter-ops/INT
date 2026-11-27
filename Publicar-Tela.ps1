@@ -162,26 +162,41 @@ function Open-Section([array]$steps) {
 
 function Open-Screen {
     if (Invoke-Panel 'menuSelected' @{rotulos=$script:screen}) { return $true }
+    $menuTimeoutSeconds = 30
     $path = @(
         @{rotulos=$script:configuration; proximos=$script:preferences},
         @{rotulos=$script:preferences; proximos=$script:screen},
         @{rotulos=$script:screen; proximos=@()}
     )
     foreach ($step in $path) {
-        if (Invoke-Panel 'menuSelected' @{rotulos=$step.rotulos}) { continue }
         $name = $step.rotulos[0]
-        Write-Host "Abrindo $name..."
-        $limit = [DateTime]::UtcNow.AddSeconds(8)
-        do {
-            $point = Invoke-Panel 'menuPoint' @{rotulos=$step.rotulos}
-            if ($point) { break }
-            Start-Sleep -Milliseconds 250
-        } while ([DateTime]::UtcNow -lt $limit)
-        if ($point) {
-            $null = Send-Cdp 'Input.dispatchMouseEvent' @{type='mouseMoved';x=$point.x;y=$point.y}
-            $null = Send-Cdp 'Input.dispatchMouseEvent' @{type='mousePressed';button='left';buttons=1;clickCount=1;x=$point.x;y=$point.y}
-            $null = Send-Cdp 'Input.dispatchMouseEvent' @{type='mouseReleased';button='left';buttons=0;clickCount=1;x=$point.x;y=$point.y}
-            if (Wait-Panel 'menuReached' $step 8) { continue }
+        $labels = @{rotulos=$step.rotulos}
+        $selected = Invoke-Panel 'menuSelected' $labels
+        $point = $null
+        if (!$selected) {
+            Write-Host "Abrindo $name..."
+            $limit = [DateTime]::UtcNow.AddSeconds($menuTimeoutSeconds)
+            do {
+                $point = Invoke-Panel 'menuPoint' $labels
+                if ($point) { break }
+                Start-Sleep -Milliseconds 250
+            } while ([DateTime]::UtcNow -lt $limit)
+            if ($point) {
+                $null = Send-Cdp 'Input.dispatchMouseEvent' @{type='mouseMoved';x=$point.x;y=$point.y}
+                $null = Send-Cdp 'Input.dispatchMouseEvent' @{type='mousePressed';button='left';buttons=1;clickCount=1;x=$point.x;y=$point.y}
+                $null = Send-Cdp 'Input.dispatchMouseEvent' @{type='mouseReleased';button='left';buttons=0;clickCount=1;x=$point.x;y=$point.y}
+            }
+        }
+        if ($selected -or $point) {
+            if ($step.proximos.Count) {
+                # O menu pai pode ficar ativo antes que o próximo item aceite cliques.
+                $next = $step.proximos[0]
+                Write-Host "Aguardando $next..."
+                if (Wait-Panel 'menuPoint' @{rotulos=$step.proximos} $menuTimeoutSeconds) { continue }
+                Ask-Step "Não consegui acessar $next. Se necessário, abra $name e aguarde $next aparecer. Digite C quando $next estiver disponível."
+                continue
+            }
+            if (Wait-Panel 'menuReached' $step $menuTimeoutSeconds) { continue }
         }
         Ask-Step "Não consegui confirmar a abertura de $name. Clique em $name no painel e digite C para o script continuar."
     }
