@@ -6,11 +6,12 @@ Windows PowerShell 5.1 e o Edge ou Chrome instalado no computador.
 Você precisa ter acesso à rede dos terminais e ao painel de configuração.
 
 1. Informe um ou vários IPs ou URLs, separados por espaço, vírgula ou
-   ponto e vírgula. O padrão é HTTP. Para uma porta específica, digite,
-   por exemplo, 192.168.1.50:8686 ou http://192.168.1.50:8686.
+   ponto e vírgula. O acesso ao terminal usa HTTPS. Para uma porta
+   específica, digite 192.168.1.50:8686 ou https://192.168.1.50:8686.
    Se digitar 192.168.1.50/8686, o script pergunta se 8686 é a porta.
    Responda S para usar a porta ou N para manter o caminho /8686.
-   Você também pode colar uma URL completa, inclusive com HTTPS.
+   Se colar um endereço com http://, o script troca o prefixo por https://
+   antes de abrir o navegador. A porta e o caminho informados são preservados.
 2. Confira o caminho da imagem antes de iniciar. O script ordena Downloads
    pela última modificação e ignora downloads parciais. Se o arquivo mais
    recente for um ZIP, por exemplo, ou houver empate, ele abre o seletor.
@@ -22,8 +23,7 @@ Você precisa ter acesso à rede dos terminais e ao painel de configuração.
    Se a sessão já estiver aberta, a publicação segue direto. Se o login
    continuar aberto após o envio, o CSV registra a pendência daquele IP.
    Em telas de autenticação diferentes, siga a indicação na janela.
-   A senha não é gravada pelo script nem incluída no CSV. Em HTTP a conexão
-   com o terminal não tem a criptografia de transporte do HTTPS.
+   A senha não é gravada pelo script nem incluída no CSV.
    Se aparecer ERR_BLOCKED_BY_CLIENT, a aba fica aberta para você conferir
    o endereço e abri-lo manualmente. Digite C ao ver o painel ou o login.
    Se o bloqueio persistir, digite P para registrar a falha e seguir o lote.

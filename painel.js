@@ -3,10 +3,7 @@ function painel(acao, dados) {
   const norm = v => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .trim().replace(/\s+/g, ' ').toLowerCase();
   const origin = new URL(dados.url);
-  const mesmoTerminal = location.origin === origin.origin ||
-    (origin.protocol === 'http:' && !origin.port && location.protocol === 'https:' &&
-     !location.port && origin.hostname === location.hostname);
-  if (!mesmoTerminal) return null;
+  if (origin.protocol !== 'https:' || location.origin !== origin.origin) return null;
   const docs = [document];
   for (const doc of docs) {
     for (const frame of doc.querySelectorAll('iframe,frame')) {
@@ -32,7 +29,7 @@ function painel(acao, dados) {
   const headings = 'h1,h2,h3,h4,legend,[role=heading],[role=tab][aria-selected=true],nav [aria-current=page]';
   const active = labels => all(headings).some(e => vis(e) && matches(e, labels));
   function menuLabel(labels) {
-    const selector = buttons + ',li,div,span,p,strong,b,em,label,dt,dd,td,[title],[aria-label]';
+    const selector = buttons + ',li,div,span,p,strong,b,em,label,dt,dd,td,summary,[aria-expanded],[onclick],[title],[aria-label]';
     const candidates = all(selector).filter(e => usable(e) && matches(e, labels));
     // A legenda pode ser só texto dentro do item que recebe o evento.
     // Prefira a barra lateral ao cartão de mesmo nome na página Overview.
@@ -47,7 +44,8 @@ function painel(acao, dados) {
       return false;
     };
     const inMenu = candidates.filter(sidebar);
-    const pool = inMenu.length ? inMenu : candidates.filter(e => !e.closest(headings));
+    const pool = inMenu.length ? inMenu : candidates.filter(e =>
+      !e.closest(headings) || e.closest(buttons + ',summary,[aria-expanded],[onclick]'));
     const leaves = pool.filter(e => !pool.some(other => other !== e && e.contains(other)));
     const controls = new Map();
     for (const leaf of leaves) {
@@ -62,9 +60,17 @@ function painel(acao, dados) {
     const mark = item?.closest('[aria-current=page],[aria-selected=true],[aria-expanded=true],.active,.is-active,.selected,.router-link-active');
     return !!mark && (mark === item || matches(mark,labels));
   }
-  function menuPoint(labels) {
-    const el = menuLabel(labels);
+  function menuPoint(labels, expand) {
+    let el = menuLabel(labels);
     if (!el) return null;
+    if (expand) {
+      // Alguns firmwares usam uma seta separada do texto para abrir o submenu.
+      const row = el.closest('li,[role=treeitem],[role=menuitem]') || el.parentElement;
+      const toggle = row && one(all('[aria-expanded=false]',row).filter(e =>
+        usable(e) && (!e.closest('li,[role=treeitem],[role=menuitem]') ||
+          e.closest('li,[role=treeitem],[role=menuitem]') === row)));
+      if (toggle && (toggle.contains(el) || matches(row,labels))) el = toggle;
+    }
     el.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});
     const rect = el.getBoundingClientRect();
     let doc = el.ownerDocument, win = doc.defaultView;
@@ -93,14 +99,67 @@ function painel(acao, dados) {
     ...String(e.getAttribute('aria-labelledby') || '').split(/\s+/).map(id => e.ownerDocument.getElementById(id)?.innerText)
   ]).map(norm);
   function sleepControl() {
-    const list = all('input[type=checkbox],[role=switch],[role=checkbox]').filter(e =>
+    const semantic = 'input[type=checkbox],[role=switch],[role=checkbox],[aria-pressed]';
+    const named = all(semantic).filter(e =>
       (vis(e) || [...(e.labels || [])].some(vis)) && associated(e).some(v => sleepNames.map(norm).includes(v)));
-    return one(list);
+    if (named.length) return one(named.filter(e => !named.some(p => p !== e && p.contains(e))));
+
+    // O painel também pode exibir o texto Sleep em uma coluna ao lado da chave.
+    const labels = all('label,span,div,td,th,dt,p').filter(e =>
+      vis(e) && sleepNames.map(norm).includes(norm(e.innerText)));
+    const controls = new Set();
+    for (const label of labels.filter(e => !labels.some(child => child !== e && e.contains(child)))) {
+      for (let row = label; row && row !== label.ownerDocument.body; row = row.parentElement) {
+        // Pare antes de incluir outra linha do formulário, como "Sleep after".
+        if (!sleepNames.map(norm).includes(norm(row.innerText))) break;
+        let found = all(semantic + ',[class*="switch" i],[class*="toggle" i]',row).filter(vis);
+        if (!found.length) found = all('button,a,span,div,i',row).filter(e => thumbState(e) !== null);
+        // A trilha, o botão e o indicador interno podem compor uma única chave.
+        const outer = found.filter(e => !found.some(p => p !== e && p.contains(e)));
+        if (!outer.length) continue;
+        if (outer.length !== 1) return null;
+        controls.add(outer[0]);
+        break;
+      }
+    }
+    return one([...controls]);
+  }
+  function thumbState(track) {
+    // Chave horizontal sem atributos de estado: confira a posição do indicador circular.
+    const box = track.getBoundingClientRect();
+    const style = el => el.ownerDocument.defaultView.getComputedStyle(el);
+    if (box.height <= 0 || box.width < 1.5 * box.height || box.width > 3 * box.height ||
+        style(track).direction !== 'ltr' || !vis(track)) return null;
+    const thumbs = [...track.children].filter(el => {
+      const r = el.getBoundingClientRect();
+      return vis(el) && parseFloat(style(el).borderTopLeftRadius) > 0 &&
+        r.height >= box.height * 0.6 && r.height <= box.height &&
+        Math.abs(r.width - r.height) <= 2 && r.left >= box.left - 1 && r.right <= box.right + 1 &&
+        Math.abs((r.top + r.bottom) - (box.top + box.bottom)) <= 4;
+    });
+    const thumb = one(thumbs);
+    if (!thumb) return null;
+    const r = thumb.getBoundingClientRect();
+    const left = r.left - box.left, right = box.right - r.right;
+    if (Math.min(left,right) > box.height / 4 || Math.abs(left-right) < box.height / 2) return null;
+    return left > right;
   }
   function state(el) {
     if (!el) return null;
-    if (el.matches('input')) return el.indeterminate ? null : el.checked;
-    return ({true:true,false:false})[el.getAttribute('aria-checked')] ?? null;
+    for (const attr of ['aria-checked','aria-pressed']) {
+      if (el.hasAttribute(attr)) return ({true:true,false:false})[el.getAttribute(attr)] ?? null;
+    }
+    const input = el.matches('input[type=checkbox]') ? el : one(all('input[type=checkbox]',el));
+    if (input) return input.indeterminate ? null : input.checked;
+    const semantic = one(all('[aria-checked],[aria-pressed]',el));
+    if (semantic) return state(semantic);
+    for (const [base,checked] of [['el-switch','is-checked'],['ant-switch','ant-switch-checked'],
+        ['ivu-switch','ivu-switch-checked'],['layui-form-switch','layui-form-onswitch']]) {
+      if (el.classList.contains(base)) return el.classList.contains(checked);
+    }
+    if (el.matches('.switch-on,.switch-open,.switch-checked,.toggle-on,.is-checked')) return true;
+    if (el.matches('.switch-off,.switch-close,.switch-closed,.toggle-off,.is-unchecked')) return false;
+    return thumbState(el);
   }
   function fileMatches(root) {
     // Nome exato, incluindo extensão. Exclui campos de upload e miniaturas ocultas.
@@ -223,22 +282,26 @@ function painel(acao, dados) {
     case 'success': return all('[role=status],[role=alert],.toast,.el-message,.ant-message-notice').some(e => vis(e) &&
       /^(saved successfully|successfully saved|save successful|salvo com sucesso|salva com sucesso|alterações salvas|configurações salvas)[.!]?$/i.test(e.innerText.trim()));
     case 'active': return active(dados.rotulos);
-    case 'menuPoint': return menuPoint(dados.rotulos);
-    case 'menuSelected': return menuSelected(dados.rotulos);
-    case 'menuReached': return menuSelected(dados.rotulos) ||
-      (dados.proximos?.length ? !!menuLabel(dados.proximos) : state(sleepControl()) !== null);
+    case 'menuPoint': return menuPoint(dados.rotulos, dados.proximos?.length);
+    case 'menuReached': return dados.proximos?.length
+      ? !!menuLabel(dados.proximos)
+      : menuSelected(dados.rotulos) || state(sleepControl()) !== null;
     case 'click': return click(action(dados.rotulos));
     case 'sleep': return state(sleepControl());
+    case 'sleepReady': return state(sleepControl()) !== null;
+    case 'sleepOff': return state(sleepControl()) === false;
     case 'disable': {
       const el = sleepControl();
-      if (state(el) !== true || el.disabled || el.getAttribute('aria-disabled') === 'true') return false;
-      return click(el);
+      if (state(el) !== true || el.closest(':disabled,[aria-disabled=true],.is-disabled')) return false;
+      const target = el.matches('input,[role=switch],[role=checkbox],[aria-pressed]') ? el :
+        one(all('[role=switch],[role=checkbox],[aria-pressed]',el).filter(vis)) || one(all('input[type=checkbox]',el)) || el;
+      return !target.matches(':disabled,[aria-disabled=true]') && click(target);
     }
     case 'saveSleep': {
       const el = sleepControl();
       if (state(el) !== false) return false;
-      const root = el.closest('form,section,fieldset');
-      return click((root && action(save,root)) || action(save));
+      const root = el.closest('form,section,fieldset,[role=tabpanel]');
+      return click((root && action(save,root)) || action(save,el.ownerDocument));
     }
     case 'media': {
       const root = scope(one(all(headings).filter(e => vis(e) && matches(e,dados.biblioteca))));

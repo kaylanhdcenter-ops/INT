@@ -17,12 +17,13 @@ $script:agenda = @('Schedule Management','Gerenciamento de horários','Gerenciam
 function Get-TerminalUrl([string]$value) {
     $value = $value.Trim()
     if (!$value) { throw 'Endereço vazio.' }
-    if ($value -notmatch '^[a-z][a-z\d+.-]*://') { $value = 'http://' + $value }
+    $value = $value -replace '^http://', 'https://'
+    if ($value -notmatch '^[a-z][a-z\d+.-]*://') { $value = 'https://' + $value }
     $uri = $null
-    if (![Uri]::TryCreate($value, [UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -notin 'http','https' -or
+    if (![Uri]::TryCreate($value, [UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -ne 'https' -or
         !$uri.Host -or $uri.UserInfo -or $value -match '[\s\\]') { throw "Endereço inválido: $value" }
     # Uma URL com caminho numérico também pode ser válida. O operador decide.
-    if ($value -match '^https?://(?:\[[^\]]+\]|[^/:?#]+)/(?<porta>[0-9]{1,5})/?$') {
+    if ($value -match '^https://(?:\[[^\]]+\]|[^/:?#]+)/(?<porta>[0-9]{1,5})/?$') {
         $port = [int]$Matches.porta
         if ($port -ge 1 -and $port -le 65535) {
             $alternative = [UriBuilder]::new($uri)
@@ -161,19 +162,19 @@ function Open-Section([array]$steps) {
 }
 
 function Open-Screen {
-    if (Invoke-Panel 'menuSelected' @{rotulos=$script:screen}) { return $true }
     $path = @(
         @{rotulos=$script:configuration; proximos=$script:preferences},
         @{rotulos=$script:preferences; proximos=$script:screen},
         @{rotulos=$script:screen; proximos=@()}
     )
+    if (Invoke-Panel 'menuReached' $path[-1]) { return $true }
     foreach ($step in $path) {
-        if (Invoke-Panel 'menuSelected' @{rotulos=$step.rotulos}) { continue }
+        if (Invoke-Panel 'menuReached' $step) { continue }
         $name = $step.rotulos[0]
         Write-Host "Abrindo $name..."
         $limit = [DateTime]::UtcNow.AddSeconds(8)
         do {
-            $point = Invoke-Panel 'menuPoint' @{rotulos=$step.rotulos}
+            $point = Invoke-Panel 'menuPoint' $step
             if ($point) { break }
             Start-Sleep -Milliseconds 250
         } while ([DateTime]::UtcNow -lt $limit)
@@ -213,23 +214,27 @@ function Wait-Save {
 
 function Set-Screen {
     $opened = Open-Screen
-    $state = Invoke-Panel 'sleep'
-    if (!$opened -or $null -eq $state) {
+    if (!$opened -or !(Wait-Panel 'sleepReady' @{} 5)) {
         Ask-Step 'Em Screen Display, confira Sleep, desative se necessário e clique em Save. Aguarde a confirmação.'
     } else {
-        if ($state) {
-            $clicked = Invoke-Panel 'disable'
-            if ($clicked) { Start-Sleep -Milliseconds 350 }
+        if (Invoke-Panel 'sleep') {
+            Write-Host 'Desativando Sleep...'
+            $null = Invoke-Panel 'disable'
         }
-        if (!(Invoke-Panel 'saveSleep')) {
+        if (!(Wait-Panel 'sleepOff' @{} 5) -or !(Wait-Panel 'saveSleep' @{} 3)) {
             Ask-Step 'Em Screen Display, confirme Sleep desativado, salve a seção e aguarde a confirmação.'
-        } else { Wait-Save }
+        } else {
+            Write-Host 'Clique em Save enviado.'
+            Wait-Save
+        }
     }
     Reload-Panel
     $opened = Open-Screen
-    $state = Invoke-Panel 'sleep'
-    if ($opened -and $null -ne $state -and !$state) { return 'Confirmado na releitura' }
-    if ($opened -and $state -eq $true) { throw 'Sleep continuou ativado após reabrir a tela.' }
+    if ($opened -and (Wait-Panel 'sleepReady' @{} 5)) {
+        $state = Invoke-Panel 'sleep'
+        if ($state -eq $false) { return 'Confirmado na releitura' }
+        if ($state -eq $true) { throw 'Sleep continuou ativado após reabrir a tela.' }
+    }
     Ask-Step 'Após a recarga, reabra Screen Display e confira se Sleep está desativado.'
     return 'Conferido pelo operador após recarga'
 }
@@ -413,6 +418,8 @@ function Enter-Terminal {
 
 function Open-Terminal {
     Connect-Tab
+    $null = Send-Cdp 'Network.enable'
+    $null = Send-Cdp 'Network.setBlockedURLs' @{urls=@('http://*')}
     $navigation = Send-Cdp 'Page.navigate' @{url=$script:target}
     if ($navigation.errorText -like 'net::ERR_CERT_*') {
         Ask-Step 'O navegador pediu a verificação do certificado. Confira o endereço e resolva o aviso no navegador segundo o procedimento do equipamento.'
@@ -428,7 +435,7 @@ function Open-Terminal {
 
 function Publish-Batch {
     if ([string]::CompareOrdinal($Inicio,$Fim) -ge 0 -or [string]::IsNullOrWhiteSpace($Dias)) { throw 'Indique os dias e um intervalo com início anterior ao fim.' }
-    if (!$Terminais) { $Terminais = @((Read-Host 'IPs ou URLs dos terminais (ex.: 192.168.1.50:8686; HTTP por padrão). Separe os endereços por espaço, vírgula ou ponto e vírgula')) }
+    if (!$Terminais) { $Terminais = @((Read-Host 'IPs ou URLs dos terminais (ex.: 192.168.1.50:8686). Acesso por HTTPS. Separe os endereços por espaço, vírgula ou ponto e vírgula')) }
     $targets = @($Terminais -split '[\s,;]+' | Where-Object { $_ } | ForEach-Object { Get-TerminalUrl $_ } | Select-Object -Unique)
     if (!$targets.Count) { throw 'Informe pelo menos um endereço.' }
     $script:imagePath = Select-ImageFile $Imagem $Downloads
